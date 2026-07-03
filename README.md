@@ -12,8 +12,9 @@ node server.js     # control plane → http://localhost:4700
 node simulator.js  # in a second terminal: simulated 4-agent fleet
 ```
 
-Open http://localhost:4700. At t+40s the simulator "deploys" a bloated summarizer prompt and the
-anomaly alert fires: cost/call ~×2 vs baseline.
+Open http://localhost:4700. At t+3min the simulator "deploys" a bloated summarizer prompt
+(re-including full retrieval history); the anomaly alert fires a minute or two later:
+cost/call ~×2 vs baseline.
 
 ```sh
 npm test           # store: normalization, cost math, edge derivation, anomaly detection

@@ -3,7 +3,8 @@
 // summarizer prompt — cost/call roughly doubles and the anomaly alert fires.
 
 const ENDPOINT = process.env.FLEETGLASS_URL || 'http://localhost:4700/v1/traces';
-const PROMPT_CHANGE_MS = Number(process.env.PROMPT_CHANGE_MS || 40_000);
+// change lands after the detector has a clean baseline (needs ~5 summarizer calls)
+const PROMPT_CHANGE_MS = Number(process.env.PROMPT_CHANGE_MS || 180_000);
 const started = Date.now();
 
 const hex = (n) => [...crypto.getRandomValues(new Uint8Array(n))].map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -52,13 +53,14 @@ function task() {
       ctx: { system: jitter(900), history: jitter(2600), retrieval: jitter(4100), tools: jitter(600) },
     });
     spans.push(research);
-    if (Math.random() < 0.09) {
-      const history = promptChanged ? jitter(14700) : jitter(6400);
+    if (Math.random() < 0.12) {
+      // the "bad deploy": prompt change starts re-including full retrieval history
+      const history = promptChanged ? jitter(24000) : jitter(6400);
       const ctx = { system: jitter(2100), history, retrieval: jitter(3700), tools: jitter(5500) };
       spans.push(span({
         trace, parent: research.spanId, agent: 'summarizer', model: 'opus-4-8',
         inTok: ctx.system + ctx.history + ctx.retrieval + ctx.tools,
-        outTok: jitter(promptChanged ? 1900 : 1200),
+        outTok: jitter(promptChanged ? 2200 : 1200),
         ctx,
       }));
     }
