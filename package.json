@@ -1,0 +1,12 @@
+{
+  "name": "fleetglass",
+  "version": "0.1.0",
+  "description": "Live control plane for AI agent fleets — see what your agents are doing right now and what it costs.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "sim": "node simulator.js",
+    "test": "node --test"
+  },
+  "license": "MIT"
+}

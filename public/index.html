@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FleetGlass — agent control plane</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink: #0b0e14;
+  --panel: #10141d;
+  --tile: #131926;
+  --line: #1d2432;
+  --line2: #2b3548;
+  --text: #e6eaf2;
+  --dim: #8792a6;
+  --faint: #5a6478;
+  --money: #e8a33d;
+  --signal: #ff5c47;
+  --ok: #4ec9a0;
+  --wire: #5b8def;
+  --violet: #8b6fd8;
+}
+* { box-sizing: border-box; margin: 0; }
+html { color-scheme: dark; }
+body {
+  background: var(--ink);
+  color: var(--text);
+  font: 14px/1.5 "IBM Plex Sans", system-ui, sans-serif;
+  min-height: 100vh;
+}
+.mono { font-family: "IBM Plex Mono", monospace; }
+header {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 22px;
+  border-bottom: 1px solid var(--line);
+}
+.wordmark {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 14px; font-weight: 500; letter-spacing: .22em;
+}
+.wordmark b { color: var(--dim); font-weight: 400; }
+.pill {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px; letter-spacing: .08em; color: var(--dim);
+  border: 1px solid var(--line2); border-radius: 999px; padding: 3px 10px;
+}
+header .spacer { flex: 1; }
+#clock { font-size: 12px; color: var(--faint); }
+.livechip {
+  display: flex; align-items: center; gap: 7px;
+  font-family: "IBM Plex Mono", monospace; font-size: 10px; letter-spacing: .18em; color: var(--ok);
+}
+.livechip i {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--ok);
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse { 50% { opacity: .25; } }
+
+main { max-width: 1180px; margin: 0 auto; padding: 20px 22px 48px; }
+.metrics {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px; margin-bottom: 12px;
+}
+.metric {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+  padding: 12px 16px 14px;
+}
+.metric .k, .panel h2 {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px; font-weight: 400; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--faint);
+}
+.metric .v {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 26px; font-weight: 500; margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.metric .v.money { color: var(--money); }
+.metric .v.hot { color: var(--signal); }
+
+.cols { display: grid; grid-template-columns: minmax(0, 1.9fr) minmax(0, 1fr); gap: 12px; }
+@media (max-width: 900px) { .cols { grid-template-columns: 1fr; } }
+.panel {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+  padding: 14px 16px 16px; margin-bottom: 12px;
+}
+.panel h2 { margin-bottom: 12px; }
+#graph { width: 100%; height: auto; display: block; }
+
+.costrow {
+  display: grid; grid-template-columns: 110px minmax(0, 1fr) 150px;
+  gap: 12px; align-items: center; margin-bottom: 10px; font-size: 13px;
+}
+.costrow .bar { height: 9px; border-radius: 2px; background: var(--money); opacity: .9; }
+.costrow .bar.hot { background: var(--signal); }
+.costrow .amt { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; color: var(--dim); text-align: right; font-variant-numeric: tabular-nums; }
+.costrow .amt b { color: var(--money); font-weight: 500; }
+.costrow .amt.hot b { color: var(--signal); }
+
+.alert {
+  display: flex; gap: 10px; align-items: baseline;
+  border-left: 2px solid var(--signal);
+  padding: 6px 10px; margin-bottom: 8px; font-size: 12.5px;
+  background: rgba(255, 92, 71, .06);
+}
+.alert time { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; color: var(--faint); white-space: nowrap; }
+.alert b { color: var(--signal); font-weight: 500; }
+.empty { color: var(--faint); font-size: 12.5px; }
+
+#ctxbar { display: flex; height: 22px; border-radius: 3px; overflow: hidden; margin-bottom: 12px; }
+#ctxbar div { min-width: 2px; }
+.legend { display: grid; gap: 7px; font-size: 12px; }
+.legend .row { display: flex; align-items: center; gap: 8px; color: var(--dim); }
+.legend .row i { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.legend .row .n { font-family: "IBM Plex Mono", monospace; font-size: 11px; margin-left: auto; color: var(--text); font-variant-numeric: tabular-nums; }
+#ctxtotal { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 12px; color: var(--faint); }
+#ctxtotal b { font-family: "IBM Plex Mono", monospace; color: var(--text); font-weight: 500; }
+
+.gnode { cursor: pointer; }
+.gnode rect { fill: var(--tile); stroke: var(--line2); stroke-width: 1; }
+.gnode.sel rect { stroke: var(--dim); }
+.gnode.hot rect { stroke: var(--signal); stroke-width: 1.5; }
+.gnode .name { font: 600 12.5px "IBM Plex Sans", sans-serif; fill: var(--text); }
+.gnode .meta { font: 10.5px "IBM Plex Mono", monospace; fill: var(--dim); }
+.gnode .meta .money { fill: var(--money); }
+.gnode .meta.hotline { fill: var(--signal); }
+.gedge { stroke: var(--line2); stroke-width: 1.2; fill: none; }
+.gelabel { font: 10px "IBM Plex Mono", monospace; fill: var(--faint); }
+.gdot { fill: var(--wire); }
+.gnode .livedot { fill: var(--ok); animation: pulse 2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .livechip i, .gnode .livedot { animation: none; }
+}
+:focus-visible { outline: 2px solid var(--wire); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="wordmark">FLEET<b>GLASS</b></div>
+  <span class="pill">production</span>
+  <div class="spacer"></div>
+  <span id="clock" class="mono"></span>
+  <span class="livechip"><i></i>LIVE</span>
+</header>
+<main>
+  <section class="metrics" aria-label="fleet totals">
+    <div class="metric"><div class="k">Spend — session</div><div class="v money" id="m-spend">—</div></div>
+    <div class="metric"><div class="k">Calls / min</div><div class="v" id="m-calls">—</div></div>
+    <div class="metric"><div class="k">Tasks / min</div><div class="v" id="m-tasks">—</div></div>
+    <div class="metric"><div class="k">Anomalies</div><div class="v" id="m-alerts">—</div></div>
+  </section>
+  <div class="cols">
+    <div>
+      <section class="panel">
+        <h2>Agent topology — last 60s</h2>
+        <svg id="graph" role="img" aria-label="Live agent topology graph"></svg>
+      </section>
+      <section class="panel">
+        <h2>Cost by agent — session</h2>
+        <div id="costs" class="empty">Waiting for traffic…</div>
+      </section>
+    </div>
+    <div>
+      <section class="panel">
+        <h2>Anomalies</h2>
+        <div id="alerts" class="empty">No anomalies. Baselines steady.</div>
+      </section>
+      <section class="panel">
+        <h2 id="ctx-title">Context window</h2>
+        <div id="ctx" class="empty">Select an agent in the graph.</div>
+      </section>
+    </div>
+  </div>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
