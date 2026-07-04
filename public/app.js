@@ -199,30 +199,141 @@ function renderAlerts() {
   }
 }
 
+function buildCtx(ctx, box, withLegend = true) {
+  const total = CTX.reduce((s, [k]) => s + (ctx[k] || 0), 0);
+  if (!total) return 0;
+  const bar = document.createElement('div');
+  bar.className = 'ctxbar';
+  const legend = document.createElement('div');
+  legend.className = 'legend';
+  for (const [k, label, color] of CTX) {
+    const pct = ((ctx[k] || 0) / total) * 100;
+    const seg = document.createElement('div');
+    seg.style.cssText = `width:${pct}%;background:${color}`;
+    bar.appendChild(seg);
+    if (!withLegend) continue;
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = `<i style="background:${color}"></i>${label}<span class="n">${fmtTok(ctx[k] || 0)} · ${Math.round(pct)}%</span>`;
+    legend.appendChild(row);
+  }
+  box.appendChild(bar);
+  if (withLegend) box.appendChild(legend);
+  return total;
+}
+
 function renderCtx() {
   const agent = snap.agents.find((a) => a.name === selected) || snap.agents[0];
   if (!agent || !agent.ctx) return;
   selected = agent.name;
   $('ctx-title').textContent = `Context window — ${agent.name}`;
-  const total = CTX.reduce((s, [k]) => s + agent.ctx[k], 0);
-  if (!total) return;
   const box = $('ctx');
   box.className = '';
-  box.innerHTML = `<div id="ctxbar"></div><div class="legend"></div><div id="ctxtotal"></div>`;
-  const bar = box.querySelector('#ctxbar');
-  const legend = box.querySelector('.legend');
-  for (const [k, label, color] of CTX) {
-    const pct = (agent.ctx[k] / total) * 100;
-    const seg = document.createElement('div');
-    seg.style.cssText = `width:${pct}%;background:${color}`;
-    bar.appendChild(seg);
-    const row = document.createElement('div');
-    row.className = 'row';
-    row.innerHTML = `<i style="background:${color}"></i>${label}<span class="n">${fmtTok(agent.ctx[k])} · ${Math.round(pct)}%</span>`;
-    legend.appendChild(row);
-  }
-  box.querySelector('#ctxtotal').innerHTML = `Latest call: <b>${fmtTok(total)}</b> input tokens · ${money(agent.costPerCall)}/call`;
+  box.textContent = '';
+  const total = buildCtx(agent.ctx, box);
+  if (!total) return;
+  const foot = document.createElement('div');
+  foot.id = 'ctxtotal';
+  foot.innerHTML = `Latest call: <b>${fmtTok(total)}</b> input tokens · ${money(agent.costPerCall)}/call`;
+  box.appendChild(foot);
 }
+
+// ---- recent tasks + replay ----
+async function renderTasks() {
+  const list = await (await fetch('/api/traces')).json();
+  if (!list.length) return;
+  const box = $('tasks');
+  box.className = '';
+  box.textContent = '';
+  for (const t of list.slice(0, 8)) {
+    const row = document.createElement('button');
+    row.className = 'taskrow';
+    row.innerHTML = `<span>${new Date(t.start).toISOString().slice(11, 19)}</span><span class="id">${t.id.slice(0, 8)}</span><span class="agents">${t.agents.join(' → ')}</span><span class="steps">${t.steps} st</span><span class="cost">${money(t.cost)}</span>`;
+    row.addEventListener('click', () => openReplay(t.id));
+    box.appendChild(row);
+  }
+}
+
+let replay = null; // {trace, idx}
+
+async function openReplay(id) {
+  const res = await fetch('/api/trace?id=' + id);
+  if (!res.ok) return;
+  replay = { trace: await res.json(), idx: 0 };
+  $('replay').hidden = false;
+  $('replay-scrub').max = replay.trace.steps.length - 1;
+  renderReplay();
+  $('replay-close').focus();
+}
+
+function closeReplay() {
+  replay = null;
+  $('replay').hidden = true;
+}
+
+function renderReplay() {
+  const { trace, idx } = replay;
+  const step = trace.steps[idx];
+  $('replay-title').textContent = `Replay — task ${trace.id.slice(0, 8)}`;
+  $('replay-cost').textContent = money(trace.steps.reduce((s, x) => s + (x.cost || 0), 0)) + ' total';
+  $('replay-scrub').value = idx;
+
+  const steps = $('replay-steps');
+  steps.textContent = '';
+  const agents = [...new Set(trace.steps.map((s) => s.agent))].sort();
+  const HUES = ['var(--wire)', 'var(--ok)', 'var(--violet)', 'var(--money)', 'var(--signal)'];
+  trace.steps.forEach((s, i) => {
+    const b = document.createElement('button');
+    b.className = 'stepdot' + (i === idx ? ' cur' : '');
+    b.style.borderLeftColor = HUES[agents.indexOf(s.agent) % HUES.length];
+    b.textContent = `${i + 1} · ${s.agent}${s.kind === 'tool' ? ' · ' + s.tool : ''}`;
+    b.addEventListener('click', () => { replay.idx = i; renderReplay(); });
+    steps.appendChild(b);
+  });
+
+  const d = $('replay-detail');
+  d.textContent = '';
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  const when = new Date(step.ts).toISOString().slice(11, 23);
+  meta.innerHTML = step.kind === 'chat'
+    ? `<span>agent <b>${step.agent}</b></span><span>model <b>${step.model}</b></span><span>tokens <b>${fmtTok(step.in)} → ${fmtTok(step.out)}</b></span><span class="money">${money(step.cost)}</span><span>${when}</span>`
+    : `<span>agent <b>${step.agent}</b></span><span>tool <b>${step.tool}</b></span><span>${when}</span>`;
+  d.appendChild(meta);
+
+  const block = (label, text) => {
+    if (!text) return;
+    const p = document.createElement('div');
+    p.className = 'payload';
+    p.innerHTML = `<div class="k">${label}</div>`;
+    const pre = document.createElement('pre');
+    pre.textContent = text;
+    p.appendChild(pre);
+    d.appendChild(p);
+  };
+  if (step.kind === 'chat') {
+    block('What the agent saw — prompt', step.prompt);
+    block('What it said — completion', step.completion);
+    const ctxWrap = document.createElement('div');
+    ctxWrap.className = 'payload';
+    ctxWrap.innerHTML = '<div class="k">Context window at this step</div>';
+    buildCtx(step.ctx, ctxWrap, true);
+    d.appendChild(ctxWrap);
+  } else {
+    block('Tool input', step.input);
+    block('Tool output', step.output);
+  }
+}
+
+$('replay-close').addEventListener('click', closeReplay);
+$('replay').addEventListener('click', (e) => { if (e.target === $('replay')) closeReplay(); });
+$('replay-scrub').addEventListener('input', (e) => { if (replay) { replay.idx = Number(e.target.value); renderReplay(); } });
+document.addEventListener('keydown', (e) => {
+  if (!replay) return;
+  if (e.key === 'Escape') closeReplay();
+  if (e.key === 'ArrowRight' && replay.idx < replay.trace.steps.length - 1) { replay.idx++; renderReplay(); }
+  if (e.key === 'ArrowLeft' && replay.idx > 0) { replay.idx--; renderReplay(); }
+});
 
 function renderAll() {
   if (!snap || !snap.agents.length) return;
@@ -231,6 +342,7 @@ function renderAll() {
   renderCosts();
   renderAlerts();
   renderCtx();
+  renderTasks();
 }
 
 new EventSource('/api/stream').onmessage = (ev) => {

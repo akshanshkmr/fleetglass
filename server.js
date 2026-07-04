@@ -30,6 +30,18 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (url.pathname === '/api/traces') {
+    res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(store.listTraces()));
+    return;
+  }
+
+  if (url.pathname === '/api/trace') {
+    const t = store.getTrace(url.searchParams.get('id'));
+    if (!t) { res.writeHead(404).end('{}'); return; }
+    res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(t));
+    return;
+  }
+
   if (url.pathname === '/api/snapshot') {
     res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(store.snapshot()));
     return;

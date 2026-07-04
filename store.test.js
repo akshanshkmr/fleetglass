@@ -45,6 +45,38 @@ test('cost table math', () => {
   assert.equal(callCost('unknown-model', 1_000_000, 1_000_000), 18); // default 3/15
 });
 
+test('traces record replayable steps in order, including tool I/O', () => {
+  const store = createStore();
+  const tool = {
+    traceId: 't1', spanId: 'tl', parentSpanId: 'b',
+    startTimeUnixNano: String((NOW - 4500) * 1e6),
+    attributes: [
+      { key: 'gen_ai.operation.name', value: { stringValue: 'execute_tool' } },
+      { key: 'gen_ai.agent.name', value: { stringValue: 'researcher' } },
+      { key: 'gen_ai.tool.name', value: { stringValue: 'web.search' } },
+      { key: 'fleetglass.tool.input', value: { stringValue: '{"q":"churn"}' } },
+      { key: 'fleetglass.tool.output', value: { stringValue: '{"results":3}' } },
+    ],
+  };
+  // ingest out of order: tool span arrives before the earlier chat spans
+  store.ingest(batch([tool]));
+  store.ingest(batch([
+    chatSpan({ ts: NOW - 5000, spanId: 'a', agent: 'orchestrator', model: 'opus-4-8', inTok: 3000, outTok: 300 }),
+    chatSpan({ ts: NOW - 4800, spanId: 'b', parent: 'a', agent: 'researcher', inTok: 8000, outTok: 900 }),
+  ]));
+
+  const list = store.listTraces();
+  assert.equal(list.length, 1);
+  assert.equal(list[0].steps, 3);
+  assert.deepEqual(list[0].agents.sort(), ['orchestrator', 'researcher']);
+
+  const t = store.getTrace('t1');
+  assert.deepEqual(t.steps.map((s) => s.kind), ['chat', 'chat', 'tool']);
+  assert.equal(t.steps[2].tool, 'web.search');
+  assert.equal(t.steps[2].output, '{"results":3}');
+  assert.equal(t.start, NOW - 5000);
+});
+
 test('anomaly fires when recent cost/call doubles vs baseline', () => {
   const store = createStore();
   const spans = [];

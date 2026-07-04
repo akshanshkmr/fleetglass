@@ -110,8 +110,8 @@ main { max-width: 1180px; margin: 0 auto; padding: 20px 22px 48px; }
 .alert b { color: var(--signal); font-weight: 500; }
 .empty { color: var(--faint); font-size: 12.5px; }
 
-#ctxbar { display: flex; height: 22px; border-radius: 3px; overflow: hidden; margin-bottom: 12px; }
-#ctxbar div { min-width: 2px; }
+.ctxbar { display: flex; height: 22px; border-radius: 3px; overflow: hidden; margin-bottom: 12px; }
+.ctxbar div { min-width: 2px; }
 .legend { display: grid; gap: 7px; font-size: 12px; }
 .legend .row { display: flex; align-items: center; gap: 8px; color: var(--dim); }
 .legend .row i { width: 8px; height: 8px; border-radius: 2px; flex: none; }
@@ -135,6 +135,70 @@ main { max-width: 1180px; margin: 0 auto; padding: 20px 22px 48px; }
   .livechip i, .gnode .livedot { animation: none; }
 }
 :focus-visible { outline: 2px solid var(--wire); outline-offset: 2px; }
+
+.taskrow {
+  display: grid; grid-template-columns: 66px 74px minmax(0, 1fr) 44px 70px;
+  gap: 12px; align-items: baseline;
+  width: 100%; text-align: left;
+  background: none; border: 0; border-top: 1px solid var(--line);
+  padding: 7px 2px; cursor: pointer;
+  font: 12px "IBM Plex Mono", monospace; color: var(--dim);
+}
+.taskrow:hover { background: rgba(91, 141, 239, .05); }
+.taskrow:first-child { border-top: 0; }
+.taskrow .id { color: var(--text); }
+.taskrow .agents { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--faint); }
+.taskrow .cost { color: var(--money); text-align: right; }
+.taskrow .steps { text-align: right; }
+
+#replay {
+  position: fixed; inset: 0; z-index: 10;
+  background: rgba(5, 7, 11, .72);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+#replay-card {
+  background: var(--panel); border: 1px solid var(--line2); border-radius: 8px;
+  width: min(760px, 100%); max-height: 88vh; overflow-y: auto;
+  padding: 18px 20px 20px;
+}
+#replay-head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+#replay-head h2 {
+  font: 400 11px "IBM Plex Mono", monospace; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--dim); flex: 1;
+}
+#replay-cost { font-size: 13px; color: var(--money); }
+#replay-close {
+  background: none; border: 1px solid var(--line2); border-radius: 4px;
+  color: var(--dim); font-size: 12px; padding: 3px 9px; cursor: pointer;
+}
+#replay-close:hover { color: var(--text); border-color: var(--dim); }
+#replay-steps { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.stepdot {
+  border: 1px solid var(--line2); background: var(--tile); border-radius: 4px;
+  font: 10.5px "IBM Plex Mono", monospace; color: var(--dim);
+  padding: 4px 8px; cursor: pointer;
+  border-left-width: 3px;
+}
+.stepdot.cur { color: var(--text); border-color: var(--dim); }
+#replay-scrub { width: 100%; margin: 2px 0 14px; accent-color: var(--wire); }
+#replay-detail .meta {
+  display: flex; flex-wrap: wrap; gap: 8px 20px;
+  font: 11.5px "IBM Plex Mono", monospace; color: var(--dim); margin-bottom: 12px;
+}
+#replay-detail .meta b { color: var(--text); font-weight: 500; }
+#replay-detail .meta .money { color: var(--money); }
+.payload { margin-bottom: 10px; }
+.payload .k {
+  font: 10px "IBM Plex Mono", monospace; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--faint); margin-bottom: 4px;
+}
+.payload pre {
+  background: var(--ink); border: 1px solid var(--line); border-radius: 4px;
+  padding: 9px 11px; font: 12px/1.55 "IBM Plex Mono", monospace; color: var(--text);
+  white-space: pre-wrap; word-break: break-word; margin: 0;
+}
+#replay-detail .ctxbar { margin-top: 4px; }
 </style>
 </head>
 <body>
@@ -162,6 +226,10 @@ main { max-width: 1180px; margin: 0 auto; padding: 20px 22px 48px; }
         <h2>Cost by agent — session</h2>
         <div id="costs" class="empty">Waiting for traffic…</div>
       </section>
+      <section class="panel">
+        <h2>Recent tasks — click to replay</h2>
+        <div id="tasks" class="empty">Waiting for traffic…</div>
+      </section>
     </div>
     <div>
       <section class="panel">
@@ -175,6 +243,18 @@ main { max-width: 1180px; margin: 0 auto; padding: 20px 22px 48px; }
     </div>
   </div>
 </main>
+<div id="replay" hidden>
+  <div id="replay-card">
+    <div id="replay-head">
+      <h2 id="replay-title">Replay</h2>
+      <span id="replay-cost" class="mono"></span>
+      <button id="replay-close" aria-label="Close replay">✕</button>
+    </div>
+    <div id="replay-steps" role="tablist" aria-label="Steps"></div>
+    <input type="range" id="replay-scrub" min="0" value="0" step="1" aria-label="Scrub through steps">
+    <div id="replay-detail"></div>
+  </div>
+</div>
 <script src="app.js"></script>
 </body>
 </html>

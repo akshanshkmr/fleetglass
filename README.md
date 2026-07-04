@@ -27,12 +27,15 @@ npm test           # store: normalization, cost math, edge derivation, anomaly d
 - **Context inspector** — click any agent: stacked breakdown of its context window (system / history / retrievals / tool schemas).
 - **Cost heatmap** — spend and cost/call per agent; money is always amber.
 - **Anomaly alert** — cost/call in the last 90s vs the prior baseline; fires at ×1.7 without any ground-truth evals.
+- **Time-travel replay** — click any recent task: scrub step by step through what each agent saw (prompt, completion, tool I/O, context breakdown at that step). Arrow keys navigate, Esc closes. This is the seed of the Phase 1 replay substrate (fork-from-step needs live model keys and comes later).
 
 ## What's real vs. simulated
 
-Real: the ingest endpoint, normalization, edge derivation, cost math, anomaly detection, SSE live feed.
-Simulated: the agents (`simulator.js`), and the `fleetglass.context.*_tokens` attributes — context
-breakdown isn't in the OTel GenAI semconv yet, so real integrations need a thin SDK wrapper to emit it.
+Real: the ingest endpoint, normalization, edge derivation, cost math, anomaly detection, replay
+recording, SSE live feed. Simulated: the agents (`simulator.js`), and the `fleetglass.context.*_tokens`
+/ `fleetglass.tool.*` attributes — context breakdown and tool payloads aren't in the OTel GenAI
+semconv yet, so real integrations need a thin SDK wrapper to emit them (`gen_ai.prompt`/`gen_ai.completion`
+are the legacy semconv span attributes).
 
 Prices in `store.js` are approximate list prices; edit `PRICES` to match yours.
 
