@@ -21,7 +21,9 @@ function contextTokens(segments, inputTokens) {
   return Object.fromEntries(Object.entries(chars).map(([k, n]) => [k, Math.round((n / total) * inputTokens)]));
 }
 
-export function createTracer(endpoint = process.env.FLEETGLASS_URL || 'http://localhost:4700/v1/traces') {
+// `workflow` names the agent system this tracer belongs to (one card in the
+// fleet view). It maps to the OTel `service.name` resource attribute.
+export function createTracer(endpoint = process.env.FLEETGLASS_URL || 'http://localhost:4700/v1/traces', workflow = 'default') {
   let queue = [];
   let timer = null;
 
@@ -34,7 +36,12 @@ export function createTracer(endpoint = process.env.FLEETGLASS_URL || 'http://lo
       await fetch(endpoint, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ resourceSpans: [{ scopeSpans: [{ spans }] }] }),
+        body: JSON.stringify({
+          resourceSpans: [{
+            resource: { attributes: [{ key: 'service.name', value: { stringValue: workflow } }] },
+            scopeSpans: [{ spans }],
+          }],
+        }),
       });
     } catch {
       // observability must never break the agent — drop the batch

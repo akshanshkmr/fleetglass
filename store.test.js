@@ -4,8 +4,13 @@ import { createStore, callCost } from './store.js';
 
 const NOW = 1_800_000_000_000;
 
-function batch(spans) {
-  return { resourceSpans: [{ scopeSpans: [{ spans }] }] };
+function batch(spans, wf) {
+  return {
+    resourceSpans: [{
+      ...(wf ? { resource: { attributes: [{ key: 'service.name', value: { stringValue: wf } }] } } : {}),
+      scopeSpans: [{ spans }],
+    }],
+  };
 }
 
 function chatSpan({ ts, trace = 't1', spanId, parent, agent, model = 'claude-sonnet-5', inTok = 1000, outTok = 100 }) {
@@ -32,12 +37,38 @@ test('ingest normalizes spans, derives edges, computes cost', () => {
   ]));
   const snap = store.snapshot(NOW);
 
-  assert.equal(snap.agents.length, 2);
-  assert.deepEqual(snap.edges, [{ from: 'orchestrator', to: 'researcher', rpm: 1 }]);
-  const orch = snap.agents.find((a) => a.name === 'orchestrator');
+  assert.equal(snap.workflows.length, 1);
+  const wf = snap.workflows[0];
+  assert.equal(wf.name, 'default'); // no service.name resource attr
+  assert.equal(wf.agents.length, 2);
+  assert.deepEqual(wf.edges, [{ from: 'orchestrator', to: 'researcher', rpm: 1 }]);
+  const orch = wf.agents.find((a) => a.name === 'orchestrator');
   assert.ok(Math.abs(orch.spend - (3000 * 5 + 300 * 25) / 1e6) < 1e-9);
   assert.equal(snap.totals.tasksPerMin, 1);
   assert.equal(snap.totals.callsPerMin, 2);
+});
+
+test('workflows are isolated: same agent names, separate nodes and edges', () => {
+  const store = createStore();
+  store.ingest(batch([
+    chatSpan({ ts: NOW - 5000, trace: 'tA', spanId: 'a1', agent: 'planner', inTok: 1000, outTok: 100 }),
+    chatSpan({ ts: NOW - 4000, trace: 'tA', spanId: 'a2', parent: 'a1', agent: 'worker', inTok: 1000, outTok: 100 }),
+  ], 'billing-bot'));
+  store.ingest(batch([
+    chatSpan({ ts: NOW - 3000, trace: 'tB', spanId: 'b1', agent: 'planner', inTok: 9000, outTok: 900 }),
+  ], 'search-bot'));
+
+  const snap = store.snapshot(NOW);
+  assert.equal(snap.totals.workflows, 2);
+  const billing = snap.workflows.find((w) => w.name === 'billing-bot');
+  const search = snap.workflows.find((w) => w.name === 'search-bot');
+  assert.deepEqual(billing.agents.map((a) => a.name).sort(), ['planner', 'worker']);
+  assert.deepEqual(search.agents.map((a) => a.name), ['planner']); // its own planner, not shared
+  assert.equal(billing.edges.length, 1);
+  assert.equal(search.edges.length, 0);
+  assert.notEqual(billing.agents.find((a) => a.name === 'planner').spend,
+    search.agents.find((a) => a.name === 'planner').spend);
+  assert.equal(store.getTrace('tA').wf, 'billing-bot');
 });
 
 test('cost table math', () => {
@@ -62,7 +93,7 @@ test('traces record replayable steps in order, including tool I/O', () => {
   // ingest out of order: tool span arrives before the earlier chat spans
   store.ingest(batch([tool]));
   store.ingest(batch([
-    chatSpan({ ts: NOW - 5000, spanId: 'a', agent: 'orchestrator', model: 'opus-4-8', inTok: 3000, outTok: 300 }),
+    chatSpan({ ts: NOW - 5000, spanId: 'a', agent: 'orchestrator', model: 'claude-opus-4-8', inTok: 3000, outTok: 300 }),
     chatSpan({ ts: NOW - 4800, spanId: 'b', parent: 'a', agent: 'researcher', inTok: 8000, outTok: 900 }),
   ]));
 
@@ -87,11 +118,13 @@ test('anomaly fires when recent cost/call doubles vs baseline', () => {
   for (let i = 0; i < 8; i++) {
     spans.push(chatSpan({ ts: NOW - 60_000 + i * 1000, trace: 'hot' + i, spanId: 'hot' + i, agent: 'summarizer', inTok: 12000, outTok: 1200 }));
   }
-  store.ingest(batch(spans));
+  store.ingest(batch(spans, 'incident-response'));
   const snap = store.snapshot(NOW);
   assert.equal(snap.alerts.length, 1);
   assert.equal(snap.alerts[0].agent, 'summarizer');
+  assert.equal(snap.alerts[0].workflow, 'incident-response');
   assert.ok(snap.alerts[0].ratio >= 2);
+  assert.equal(snap.workflows[0].alerts, 1);
 
   // steady traffic → no alert
   const calm = createStore();

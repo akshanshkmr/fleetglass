@@ -136,6 +136,22 @@ main { max-width: 1180px; margin: 0 auto; padding: 20px 22px 48px; }
 }
 :focus-visible { outline: 2px solid var(--wire); outline-offset: 2px; }
 
+#workflows { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+.wfcard {
+  background: var(--tile); border: 1px solid var(--line2); border-radius: 6px;
+  padding: 11px 14px 12px; cursor: pointer; text-align: left;
+  font-family: inherit; color: var(--text);
+}
+.wfcard:hover { border-color: var(--dim); }
+.wfcard.sel { border-color: var(--dim); background: #161d2c; }
+.wfcard.hot { border-color: var(--signal); }
+.wfcard .name { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; margin-bottom: 6px; }
+.wfcard .name i { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); flex: none; animation: pulse 2s ease-in-out infinite; }
+.wfcard .name i.off { background: var(--faint); animation: none; }
+.wfcard .name .warn { margin-left: auto; font-family: "IBM Plex Mono", monospace; font-size: 10px; color: var(--signal); }
+.wfcard .stats { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.wfcard .stats b { color: var(--money); font-weight: 500; }
+
 .taskrow {
   display: grid; grid-template-columns: 66px 74px minmax(0, 1fr) 44px 70px;
   gap: 12px; align-items: baseline;
@@ -214,13 +230,17 @@ main { max-width: 1180px; margin: 0 auto; padding: 20px 22px 48px; }
   <section class="metrics" aria-label="fleet totals">
     <div class="metric"><div class="k">Spend — session</div><div class="v money" id="m-spend">—</div></div>
     <div class="metric"><div class="k">Calls / min</div><div class="v" id="m-calls">—</div></div>
-    <div class="metric"><div class="k">Tasks / min</div><div class="v" id="m-tasks">—</div></div>
+    <div class="metric"><div class="k">Workflows</div><div class="v" id="m-wfs">—</div></div>
     <div class="metric"><div class="k">Anomalies</div><div class="v" id="m-alerts">—</div></div>
+  </section>
+  <section class="panel">
+    <h2>Workflows — click to drill in</h2>
+    <div id="workflows" class="empty">Waiting for traffic…</div>
   </section>
   <div class="cols">
     <div>
       <section class="panel">
-        <h2>Agent topology — last 60s</h2>
+        <h2 id="graph-title">Agent topology — last 60s</h2>
         <svg id="graph" role="img" aria-label="Live agent topology graph"></svg>
       </section>
       <section class="panel">

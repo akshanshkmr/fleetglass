@@ -14,7 +14,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { createTracer } from '../tracer.js';
 
 const client = new Anthropic();
-const fg = createTracer();
+const fg = createTracer(undefined, 'incident-copilot'); // its own card in the fleet view
 
 const QUESTION = process.argv[2] ||
   'Our checkout error rate jumped from 0.4% to 2.1% after yesterday\'s deploy of payment-service v3.2. What should we investigate first?';

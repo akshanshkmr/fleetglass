@@ -8,11 +8,13 @@ const CTX = [
   ['tools', 'Tool schemas', 'var(--money)'],
 ];
 
-let selected = null;
 let snap = null;
+let selectedWf = null;    // workflow name
+let selectedAgent = null; // agent within the selected workflow
 
 const money = (n) => '$' + (n >= 100 ? Math.round(n).toLocaleString() : n.toFixed(2));
 const fmtTok = (n) => n.toLocaleString();
+const currentWf = () => snap.workflows.find((w) => w.name === selectedWf) || snap.workflows[0];
 
 setInterval(() => {
   $('clock').textContent = new Date().toISOString().slice(11, 19) + ' UTC';
@@ -60,10 +62,11 @@ function el(tag, attrs, cls) {
   return e;
 }
 
-function renderGraph() {
+function renderGraph(wf) {
   const svg = $('graph');
-  const key = snap.agents.map((a) => a.name).sort().join() + '|' + snap.edges.map((e) => e.from + e.to).sort().join();
-  const { pos, W, H } = layout(snap.agents, snap.edges);
+  $('graph-title').textContent = `Agent topology — ${wf.name} — last 60s`;
+  const key = wf.name + '|' + wf.agents.map((a) => a.name).sort().join() + '|' + wf.edges.map((e) => e.from + e.to).sort().join();
+  const { pos, W, H } = layout(wf.agents, wf.edges);
 
   if (key !== topoKey) {
     topoKey = key;
@@ -71,7 +74,7 @@ function renderGraph() {
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
     edgePaths = [];
 
-    for (const e of snap.edges) {
+    for (const e of wf.edges) {
       const a = pos[e.from], b = pos[e.to];
       if (!a || !b) continue;
       const x1 = a.x + NODE_W, y1 = a.y + NODE_H / 2, x2 = b.x, y2 = b.y + NODE_H / 2;
@@ -84,7 +87,7 @@ function renderGraph() {
       edgePaths.push({ el: path, len: path.getTotalLength(), rpm: e.rpm, dots: [], edge: e.from + '>' + e.to });
     }
 
-    for (const a of snap.agents) {
+    for (const a of wf.agents) {
       const p = pos[a.name];
       const g = el('g', { transform: `translate(${p.x} ${p.y})`, tabindex: 0, role: 'button', 'aria-label': `Inspect ${a.name}` }, 'gnode');
       g.dataset.agent = a.name;
@@ -95,8 +98,8 @@ function renderGraph() {
       g.appendChild(name);
       const meta = el('text', { x: 14, y: 41 }, 'meta');
       g.appendChild(meta);
-      g.addEventListener('click', () => { selected = a.name; renderAll(); });
-      g.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); selected = a.name; renderAll(); } });
+      g.addEventListener('click', () => { selectedAgent = a.name; renderAll(); });
+      g.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); selectedAgent = a.name; renderAll(); } });
       svg.appendChild(g);
     }
     const dotLayer = el('g', { id: 'dots' });
@@ -104,15 +107,15 @@ function renderGraph() {
   }
 
   for (const ep of edgePaths) {
-    const e = snap.edges.find((x) => x.from + '>' + x.to === ep.edge);
+    const e = wf.edges.find((x) => x.from + '>' + x.to === ep.edge);
     ep.rpm = e ? e.rpm : 0;
     const label = svg.querySelector(`text[data-edge="${ep.edge}"]`);
     if (label) label.textContent = ep.rpm + '/min';
   }
   for (const g of svg.querySelectorAll('.gnode')) {
-    const a = snap.agents.find((x) => x.name === g.dataset.agent);
+    const a = wf.agents.find((x) => x.name === g.dataset.agent);
     if (!a) continue;
-    g.classList.toggle('sel', a.name === selected);
+    g.classList.toggle('sel', a.name === selectedAgent);
     g.classList.toggle('hot', a.alert);
     const meta = g.querySelector('.meta');
     meta.textContent = '';
@@ -161,19 +164,36 @@ if (!reduced) requestAnimationFrame(animate);
 function renderMetrics() {
   $('m-spend').textContent = money(snap.totals.spend);
   $('m-calls').textContent = snap.totals.callsPerMin;
-  $('m-tasks').textContent = snap.totals.tasksPerMin;
+  $('m-wfs').textContent = snap.totals.workflows;
   const alerts = $('m-alerts');
   alerts.textContent = snap.totals.alerts;
   alerts.classList.toggle('hot', snap.totals.alerts > 0);
 }
 
-function renderCosts() {
-  const box = $('costs');
-  if (!snap.agents.length) return;
+function renderWorkflows() {
+  const box = $('workflows');
   box.className = '';
   box.textContent = '';
-  const max = Math.max(...snap.agents.map((a) => a.spend), 1e-9);
-  for (const a of snap.agents) {
+  for (const w of snap.workflows) {
+    const card = document.createElement('button');
+    card.className = 'wfcard' + (w.name === selectedWf ? ' sel' : '') + (w.alerts ? ' hot' : '');
+    card.innerHTML = `<div class="name"><i class="${w.live ? '' : 'off'}"></i>${w.name}${w.alerts ? `<span class="warn">▲ ${w.alerts}</span>` : ''}</div>
+      <div class="stats"><b>${money(w.spend)}</b> · ${w.callsPerMin}/min · ${w.agents.length} agents</div>`;
+    card.addEventListener('click', () => {
+      if (selectedWf !== w.name) { selectedWf = w.name; selectedAgent = null; }
+      renderAll();
+    });
+    box.appendChild(card);
+  }
+}
+
+function renderCosts(wf) {
+  const box = $('costs');
+  if (!wf.agents.length) return;
+  box.className = '';
+  box.textContent = '';
+  const max = Math.max(...wf.agents.map((a) => a.spend), 1e-9);
+  for (const a of wf.agents) {
     const row = document.createElement('div');
     row.className = 'costrow';
     row.innerHTML = `<span>${a.name}</span><div><div class="bar${a.alert ? ' hot' : ''}" style="width:${Math.max(2, (a.spend / max) * 100)}%"></div></div><span class="amt${a.alert ? ' hot' : ''}"><b>${money(a.spend)}</b> · ${money(a.costPerCall)}/call</span>`;
@@ -194,7 +214,7 @@ function renderAlerts() {
     const div = document.createElement('div');
     div.className = 'alert';
     const since = new Date(al.since).toISOString().slice(11, 19);
-    div.innerHTML = `<time>${since}</time><span><b>${al.agent}</b> cost/call ×${al.ratio} vs baseline — check the last prompt or model change</span>`;
+    div.innerHTML = `<time>${since}</time><span><b>${al.workflow} / ${al.agent}</b> cost/call ×${al.ratio} vs baseline — check the last prompt or model change</span>`;
     box.appendChild(div);
   }
 }
@@ -222,10 +242,10 @@ function buildCtx(ctx, box, withLegend = true) {
   return total;
 }
 
-function renderCtx() {
-  const agent = snap.agents.find((a) => a.name === selected) || snap.agents[0];
+function renderCtx(wf) {
+  const agent = wf.agents.find((a) => a.name === selectedAgent) || wf.agents[0];
   if (!agent || !agent.ctx) return;
-  selected = agent.name;
+  selectedAgent = agent.name;
   $('ctx-title').textContent = `Context window — ${agent.name}`;
   const box = $('ctx');
   box.className = '';
@@ -239,13 +259,14 @@ function renderCtx() {
 }
 
 // ---- recent tasks + replay ----
-async function renderTasks() {
+async function renderTasks(wf) {
   const list = await (await fetch('/api/traces')).json();
-  if (!list.length) return;
+  const mine = list.filter((t) => t.wf === wf.name).slice(0, 8);
+  if (!mine.length) return;
   const box = $('tasks');
   box.className = '';
   box.textContent = '';
-  for (const t of list.slice(0, 8)) {
+  for (const t of mine) {
     const row = document.createElement('button');
     row.className = 'taskrow';
     row.innerHTML = `<span>${new Date(t.start).toISOString().slice(11, 19)}</span><span class="id">${t.id.slice(0, 8)}</span><span class="agents">${t.agents.join(' → ')}</span><span class="steps">${t.steps} st</span><span class="cost">${money(t.cost)}</span>`;
@@ -274,7 +295,7 @@ function closeReplay() {
 function renderReplay() {
   const { trace, idx } = replay;
   const step = trace.steps[idx];
-  $('replay-title').textContent = `Replay — task ${trace.id.slice(0, 8)}`;
+  $('replay-title').textContent = `Replay — ${trace.wf} · task ${trace.id.slice(0, 8)}`;
   $('replay-cost').textContent = money(trace.steps.reduce((s, x) => s + (x.cost || 0), 0)) + ' total';
   $('replay-scrub').value = idx;
 
@@ -336,13 +357,16 @@ document.addEventListener('keydown', (e) => {
 });
 
 function renderAll() {
-  if (!snap || !snap.agents.length) return;
+  if (!snap || !snap.workflows.length) return;
+  const wf = currentWf();
+  selectedWf = wf.name;
   renderMetrics();
-  renderGraph();
-  renderCosts();
+  renderWorkflows();
+  renderGraph(wf);
+  renderCosts(wf);
   renderAlerts();
-  renderCtx();
-  renderTasks();
+  renderCtx(wf);
+  renderTasks(wf);
 }
 
 new EventSource('/api/stream').onmessage = (ev) => {

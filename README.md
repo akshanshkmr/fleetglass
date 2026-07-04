@@ -12,9 +12,10 @@ node server.js     # control plane → http://localhost:4700
 node simulator.js  # in a second terminal: simulated 4-agent fleet
 ```
 
-Open http://localhost:4700. At t+3min the simulator "deploys" a bloated summarizer prompt
-(re-including full retrieval history); the anomaly alert fires a minute or two later:
-cost/call ~×2 vs baseline.
+Open http://localhost:4700. The simulator runs **three concurrent workflows** (incident-response,
+support-triage, content-pipeline), so the fleet view has real breadth. At t+3min it "deploys" a
+bloated summarizer prompt into incident-response (re-including full retrieval history); the anomaly
+alert fires a minute or two later — cost/call ~×2 vs baseline — and that workflow's card lights red.
 
 ```sh
 npm test           # store: normalization, cost math, edge derivation, anomaly detection
@@ -22,7 +23,8 @@ npm test           # store: normalization, cost math, edge derivation, anomaly d
 
 ## What it does
 
-- **Ingest** — `POST /v1/traces` accepts OTLP/JSON spans using [GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/) (`gen_ai.agent.name`, `gen_ai.request.model`, `gen_ai.usage.*`).
+- **Ingest** — `POST /v1/traces` accepts OTLP/JSON spans using [GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/) (`gen_ai.agent.name`, `gen_ai.request.model`, `gen_ai.usage.*`). The `service.name` resource attribute names the **workflow** a trace belongs to.
+- **Fleet view** — one card per workflow (spend, call rate, agent count, anomaly count, live indicator). This is the bird's-eye view across every agent system running. Click a card to drill into it; everything below scopes to that workflow.
 - **Live agent graph** — agents as nodes, handoffs (derived from cross-agent parent spans) as edges, traffic dots animated at real request rates.
 - **Context inspector** — click any agent: stacked breakdown of its context window (system / history / retrievals / tool schemas).
 - **Cost heatmap** — spend and cost/call per agent; money is always amber.
