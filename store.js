@@ -12,6 +12,10 @@ export const PRICES = {
   'claude-sonnet-5': [3, 15],
   'claude-sonnet-4-6': [3, 15],
   'claude-haiku-4-5': [1, 5],
+  'gemini-2.5-pro': [1.25, 10],
+  'gemini-2.5-flash': [0.3, 2.5],
+  'gemini-2.5-flash-lite': [0.1, 0.4],
+  'gemini-2.0-flash': [0.1, 0.4],
 };
 const DEFAULT_PRICE = [3, 15];
 
