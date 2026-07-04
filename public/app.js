@@ -12,7 +12,12 @@ let snap = null;
 let selectedWf = null;    // workflow name
 let selectedAgent = null; // agent within the selected workflow
 
-const money = (n) => '$' + (n >= 100 ? Math.round(n).toLocaleString() : n.toFixed(2));
+const money = (n) => {
+  if (n >= 100) return '$' + Math.round(n).toLocaleString();
+  if (n >= 1) return '$' + n.toFixed(2);
+  if (n >= 0.01) return '$' + n.toFixed(3);   // cents
+  return '$' + n.toFixed(4);                    // sub-cent (cheap models, per-call)
+};
 const fmtTok = (n) => n.toLocaleString();
 const currentWf = () => snap.workflows.find((w) => w.name === selectedWf) || snap.workflows[0];
 
@@ -260,10 +265,12 @@ function renderCtx(wf) {
 
 // ---- recent tasks + replay ----
 async function renderTasks(wf) {
+  const wanted = wf.name;
   const list = await (await fetch('/api/traces')).json();
-  const mine = list.filter((t) => t.wf === wf.name).slice(0, 8);
-  if (!mine.length) return;
+  if (selectedWf !== wanted) return; // selection changed mid-fetch — a later call owns the panel
+  const mine = list.filter((t) => t.wf === wanted).slice(0, 8);
   const box = $('tasks');
+  if (!mine.length) { box.className = 'empty'; box.textContent = 'No tasks yet for this workflow.'; return; }
   box.className = '';
   box.textContent = '';
   for (const t of mine) {

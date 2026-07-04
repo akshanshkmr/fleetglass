@@ -64,7 +64,7 @@ console.log(`task ${task.traceId.slice(0, 8)} — watch it at http://localhost:4
 const plan = await gemini({
   task,
   agent: 'planner',
-  model: 'gemini-2.5-pro',
+  model: 'gemini-2.5-flash',
   system: 'You plan analyses for a growth team. Break the question into at most three concrete investigation steps, each with the data you would pull. Be brief.',
   user: QUESTION,
 });
@@ -90,7 +90,7 @@ task.tool({
 await gemini({
   task,
   agent: 'writer',
-  model: 'gemini-2.5-pro',
+  model: 'gemini-2.5-flash',
   parent: facts.spanId,
   system: 'Write a 4-sentence brief for the founder: the single most likely cause, the strongest supporting signal to check, one alternative hypothesis, and the first concrete action.',
   user: `Question: ${QUESTION}\n\nPlan:\n${plan.text}\n\nSignals to check:\n${facts.text}`,

@@ -129,7 +129,10 @@ export function createStore() {
     }
   }
 
-  function listTraces(limit = 60) {
+  // return the whole retained set (<= MAX_TRACES); the client filters per
+  // workflow, so a high-volume workflow must not starve a quiet one out of a
+  // small global window.
+  function listTraces(limit = MAX_TRACES) {
     return [...traces.entries()].slice(-limit).reverse().map(([id, t]) => ({
       id,
       wf: t.wf,
