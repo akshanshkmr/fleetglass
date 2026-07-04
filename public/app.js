@@ -116,7 +116,7 @@ function renderGraph() {
     g.classList.toggle('hot', a.alert);
     const meta = g.querySelector('.meta');
     meta.textContent = '';
-    const model = document.createTextNode(a.model + ' · ');
+    const model = document.createTextNode(a.model.replace(/^claude-/, '') + ' · ');
     const cost = document.createElementNS(SVGNS, 'tspan');
     cost.setAttribute('class', 'money');
     cost.textContent = money(a.spend);

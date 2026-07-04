@@ -71,7 +71,7 @@ function task() {
   const topic = pick(TOPICS);
 
   const orch = span({
-    trace, agent: 'orchestrator', model: 'opus-4-8',
+    trace, agent: 'orchestrator', model: 'claude-opus-4-8',
     inTok: jitter(3000), outTok: jitter(280),
     ctx: { system: jitter(1400), history: jitter(1100), retrieval: 0, tools: jitter(500) },
     prompt: `Task: analyze ${topic}. Decide which specialists to involve and dispatch subtasks.`,
@@ -82,7 +82,7 @@ function task() {
   const r = Math.random();
   if (r < 0.48) {
     const research = span({
-      trace, parent: orch.spanId, agent: 'researcher', model: 'sonnet-5',
+      trace, parent: orch.spanId, agent: 'researcher', model: 'claude-sonnet-5',
       inTok: jitter(8200), outTok: jitter(900),
       ctx: { system: jitter(900), history: jitter(2600), retrieval: jitter(4100), tools: jitter(600) },
       prompt: `Research: ${topic}. Use web.search, cite sources, return structured findings.`,
@@ -99,7 +99,7 @@ function task() {
       const history = promptChanged ? jitter(24000) : jitter(6400);
       const ctx = { system: jitter(2100), history, retrieval: jitter(3700), tools: jitter(5500) };
       spans.push(span({
-        trace, parent: research.spanId, agent: 'summarizer', model: 'opus-4-8',
+        trace, parent: research.spanId, agent: 'summarizer', model: 'claude-opus-4-8',
         inTok: ctx.system + ctx.history + ctx.retrieval + ctx.tools,
         outTok: jitter(promptChanged ? 2200 : 1200),
         ctx,
@@ -109,7 +109,7 @@ function task() {
     }
   } else if (r < 0.92) {
     const extract = span({
-      trace, parent: orch.spanId, agent: 'extractor', model: 'haiku-4.5',
+      trace, parent: orch.spanId, agent: 'extractor', model: 'claude-haiku-4-5',
       inTok: jitter(2100), outTok: jitter(160),
       ctx: { system: jitter(700), history: jitter(300), retrieval: jitter(600), tools: jitter(500) },
       prompt: `Extract entities, dates, and figures relevant to ${topic} from the attached document.`,

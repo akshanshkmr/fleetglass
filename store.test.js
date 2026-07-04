@@ -8,7 +8,7 @@ function batch(spans) {
   return { resourceSpans: [{ scopeSpans: [{ spans }] }] };
 }
 
-function chatSpan({ ts, trace = 't1', spanId, parent, agent, model = 'sonnet-5', inTok = 1000, outTok = 100 }) {
+function chatSpan({ ts, trace = 't1', spanId, parent, agent, model = 'claude-sonnet-5', inTok = 1000, outTok = 100 }) {
   return {
     traceId: trace,
     spanId,
@@ -27,7 +27,7 @@ function chatSpan({ ts, trace = 't1', spanId, parent, agent, model = 'sonnet-5',
 test('ingest normalizes spans, derives edges, computes cost', () => {
   const store = createStore();
   store.ingest(batch([
-    chatSpan({ ts: NOW - 5000, spanId: 'a', agent: 'orchestrator', model: 'opus-4-8', inTok: 3000, outTok: 300 }),
+    chatSpan({ ts: NOW - 5000, spanId: 'a', agent: 'orchestrator', model: 'claude-opus-4-8', inTok: 3000, outTok: 300 }),
     chatSpan({ ts: NOW - 4000, spanId: 'b', parent: 'a', agent: 'researcher', inTok: 8000, outTok: 900 }),
   ]));
   const snap = store.snapshot(NOW);
@@ -35,13 +35,14 @@ test('ingest normalizes spans, derives edges, computes cost', () => {
   assert.equal(snap.agents.length, 2);
   assert.deepEqual(snap.edges, [{ from: 'orchestrator', to: 'researcher', rpm: 1 }]);
   const orch = snap.agents.find((a) => a.name === 'orchestrator');
-  assert.ok(Math.abs(orch.spend - (3000 * 15 + 300 * 75) / 1e6) < 1e-9);
+  assert.ok(Math.abs(orch.spend - (3000 * 5 + 300 * 25) / 1e6) < 1e-9);
   assert.equal(snap.totals.tasksPerMin, 1);
   assert.equal(snap.totals.callsPerMin, 2);
 });
 
 test('cost table math', () => {
-  assert.equal(callCost('haiku-4.5', 1_000_000, 0), 0.8);
+  assert.equal(callCost('claude-haiku-4-5', 1_000_000, 0), 1);
+  assert.equal(callCost('claude-haiku-4-5-20251001', 1_000_000, 0), 1); // prefix match on snapshots
   assert.equal(callCost('unknown-model', 1_000_000, 1_000_000), 18); // default 3/15
 });
 
