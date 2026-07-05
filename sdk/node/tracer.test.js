@@ -26,6 +26,21 @@ test('nested agents thread parent span → cross-agent handoff', async () => {
   assert.equal(orch.traceId, res.traceId, 'same trace');
 });
 
+test('sequential agents thread parents → handoff chain', async () => {
+  const sent = [];
+  const fg = createTracer({ post: async (spans) => sent.push(...spans) });
+  await fg.task(async () => {
+    await fg.agent('planner', async () => { fg.emitChat({ model: 'a', inputTokens: 1, outputTokens: 1 }); });
+    await fg.agent('searcher', async () => { fg.emitChat({ model: 'b', inputTokens: 1, outputTokens: 1 }); });
+    await fg.agent('writer', async () => { fg.emitChat({ model: 'c', inputTokens: 1, outputTokens: 1 }); });
+  });
+  await fg.flush();
+  const [planner, searcher, writer] = sent;
+  assert.equal(planner.parentSpanId, undefined, 'first agent has no parent');
+  assert.equal(searcher.parentSpanId, planner.spanId, 'searcher parents onto planner');
+  assert.equal(writer.parentSpanId, searcher.spanId, 'writer parents onto searcher');
+});
+
 test('sibling chat spans chain within an agent', async () => {
   const sent = [];
   const fg = createTracer({ post: async (spans) => sent.push(...spans) });

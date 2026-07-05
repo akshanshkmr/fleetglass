@@ -133,10 +133,16 @@ class _AgentScope:
         p = _ctx.get()
         if p is None:
             raise RuntimeError("fleetglass: agent() must run inside task()")
-        self._tok = _ctx.set(_Frame(p.trace, self.name, p.last or p.anchor))
+        self._parent = p
+        self._frame = _Frame(p.trace, self.name, p.last or p.anchor)
+        self._tok = _ctx.set(self._frame)
         return self
     def __exit__(self, *exc):
         _ctx.reset(self._tok)
+        # propagate the child's last span up so the next sibling agent anchors onto it
+        # → draws the sequential handoff edge. Success-path only (exc[0] is None).
+        if exc[0] is None:
+            self._parent.last = self._frame.last or self._parent.last
         return False
     def __call__(self, fn):
         @functools.wraps(fn)

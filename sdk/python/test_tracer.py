@@ -32,6 +32,21 @@ class TestTracer(unittest.TestCase):
         self.assertEqual(res['parentSpanId'], orch['spanId'])
         self.assertEqual(orch['traceId'], res['traceId'])
 
+    def test_sequential_agents_thread_parents(self):
+        fg = Sink()
+        with fg.task():
+            with fg.agent('planner'):
+                fg.emit_chat(model='a', input_tokens=1, output_tokens=1)
+            with fg.agent('searcher'):
+                fg.emit_chat(model='b', input_tokens=1, output_tokens=1)
+            with fg.agent('writer'):
+                fg.emit_chat(model='c', input_tokens=1, output_tokens=1)
+        fg.flush()
+        planner, searcher, writer = fg.sent
+        self.assertNotIn('parentSpanId', planner)
+        self.assertEqual(searcher['parentSpanId'], planner['spanId'])
+        self.assertEqual(writer['parentSpanId'], searcher['spanId'])
+
     def test_decorator_form(self):
         fg = Sink()
         @fg.agent('worker')

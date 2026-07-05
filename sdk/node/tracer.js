@@ -97,7 +97,12 @@ export function createTracer({ endpoint = process.env.FLEETGLASS_URL || 'http://
   async function agent(name, fn) {
     const p = frameOrThrow();
     const frame = { trace: p.trace, agent: name, anchor: p.last || p.anchor, last: undefined };
-    return als.run(frame, fn);
+    const r = await als.run(frame, fn);
+    // propagate the child's last span up so the next sibling agent anchors onto it
+    // → this is what draws the sequential handoff edge (planner→searcher→writer).
+    // success-path only: an agent that throws aborts the task without propagating.
+    p.last = frame.last || p.last;
+    return r;
   }
 
   const api = { task, agent, withAgent: agent, emitChat, emitTool, flush };

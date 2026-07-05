@@ -25,9 +25,9 @@ await fg.task(async () => {
     ask('gemini-2.5-flash', 'Break the question into at most three concrete investigation steps. Be brief.', QUESTION));
 
   const facts = await fg.agent('searcher', async () => {
-    const bloat = INFLATE ? `\n\n[full history]\n${plan.text.repeat(40)}` : '';
+    const bloat = INFLATE ? `\n\n[full history]\n${(plan.text || '').repeat(40)}` : '';
     const r = await ask('gemini-2.5-flash', 'List the concrete signals/metrics to check. JSON only.', `Q: ${QUESTION}\nPlan:\n${plan.text}${bloat}`);
-    fg.emitTool({ tool: 'metrics.lookup', input: QUESTION.slice(0, 160), output: r.text.slice(0, 400) });
+    fg.emitTool({ tool: 'metrics.lookup', input: QUESTION.slice(0, 160), output: (r.text || '').slice(0, 400) });
     return r;
   });
 

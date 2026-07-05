@@ -33,7 +33,7 @@ with fg.task():
     with fg.agent("planner"):
         plan = ask("gemini-2.5-flash", "Break the question into at most three concrete investigation steps. Be brief.", question)
     with fg.agent("searcher"):
-        bloat = ("\n\n[full history]\n" + plan.text * 40) if inflate else ""
+        bloat = ("\n\n[full history]\n" + (plan.text or "") * 40) if inflate else ""
         facts = ask("gemini-2.5-flash", "List the concrete signals/metrics to check. JSON only.",
                     f"Q: {question}\nPlan:\n{plan.text}{bloat}")
         fg.emit_tool(tool="metrics.lookup", input=question[:160], output=(facts.text or "")[:400])

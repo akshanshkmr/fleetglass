@@ -21,7 +21,11 @@ def _sys_text(config):
     si = config.get("system_instruction") if isinstance(config, dict) else getattr(config, "system_instruction", None)
     if not si:
         return ""
-    return si if isinstance(si, str) else str(si)
+    if isinstance(si, str):
+        return si
+    parts = getattr(si, "parts", None) or (si.get("parts") if isinstance(si, dict) else None) or []
+    text = "".join((getattr(p, "text", None) or (p.get("text") if isinstance(p, dict) else "") or "") for p in parts)
+    return text or str(si)
 
 def _tools_text(config):
     if not config:
