@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "sim": "node simulator.js",
     "test": "node --test"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "engines": { "node": ">=20" }
 }
