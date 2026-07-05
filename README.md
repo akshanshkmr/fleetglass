@@ -54,16 +54,17 @@ with the part you can trust on day one: read-only observability that never sits 
 
 ```sh
 node server.js      # control plane → http://localhost:4700
-node simulator.js   # second terminal: a simulated 4-agent, 3-workflow fleet
 ```
 
-Open **http://localhost:4700**.
+Open **http://localhost:4700**, then run any real fleet against it — see
+[Onboard your agents](#-onboard-your-agents-python-or-node-any-provider) below. The fastest way to
+see the whole loop live (graph, cost heatmap, anomaly alert) is one of the runnable examples:
 
-The simulator runs three concurrent workflows (`incident-response`, `support-triage`,
-`content-pipeline`) so the fleet view has real breadth. At **t+3min** it "deploys" a bloated
-summarizer prompt into `incident-response` (re-including full retrieval history) — a minute or two
-later the anomaly alert fires (cost/call ~×2 vs baseline) and that workflow's card lights **red**.
-That's the whole loop, live, in under four minutes.
+```sh
+cd examples && npm install
+export GEMINI_API_KEY=...
+node gemini-fleet.mjs --inflate    # --inflate re-includes full history to trip the anomaly alert
+```
 
 ```sh
 npm test            # store: normalization · cost math · edge derivation · anomaly detection
@@ -92,47 +93,67 @@ Without a key the panel says so cleanly — nothing else breaks.
 
 > **Fidelity note.** The substrate captures a step's prompt as *text* but system / history /
 > retrievals as *token counts* only, so a fork is faithful to the prompt and approximate on hidden
-> context. Record the full messages array in [`tracer.js`](tracer.js) for exact re-execution when
-> counterfactual precision matters.
+> context. Record the full messages array in [`sdk/node/tracer.js`](sdk/node/tracer.js) for exact
+> re-execution when counterfactual precision matters.
 
 ---
 
-## 🔌 Integrate your own agents
+## 🔌 Onboard your agents (Python or Node, any provider)
 
-The simulator is just one client of the ingest endpoint. To trace a real system, use
-[`tracer.js`](tracer.js) — zero dependencies, ~130 lines:
+One `wrap()` around your existing model client, one `agent()` per role — no manual span mapping,
+no explicit `parent`/`spanId` wiring. Handoffs are derived automatically from call order within a
+task.
+
+**Node** — `sdk/node/`, zero dependencies
 
 ```js
-import { createTracer } from './tracer.js';
+import { createTracer } from 'fleetglass';           // or '../sdk/node/index.js' in this repo
 
-const fg = createTracer();            // → http://localhost:4700/v1/traces
-const task = fg.startTask();          // one task = one traceId = one replay
+const fg = createTracer({ workflow: 'my-system' });
+const ai = fg.wrap(new GoogleGenAI({ apiKey }));      // or `new Anthropic()` / `new OpenAI()`
 
-// record any model call (provider-agnostic)
-const planId = task.chat({
-  agent: 'orchestrator', model: 'claude-opus-4-8',
-  inputTokens: 3000, outputTokens: 280,
-  prompt, completion,
-  context: { system, history },       // raw strings — scaled to real token usage
+await fg.task(async () => {
+  const plan = await fg.agent('planner', () =>
+    ai.models.generateContent({ model, contents, config }));
+  await fg.agent('executor', () => {
+    fg.emitTool({ tool: 'run_query', input, output });  // any non-model tool call
+    return ai.models.generateContent({ model, contents: plan.text, config });
+  });
 });
-
-// hand off to another agent: pass the previous spanId as `parent`.
-// a cross-agent parent link is what draws a handoff edge in the graph.
-task.chat({ agent: 'extractor', parent: planId, model: 'claude-haiku-4-5', /* … */ });
-task.tool({ agent: 'extractor', parent: planId, tool: 'parse_document', input, output });
-
-await fg.flush();
 ```
 
-**With the Anthropic SDK**, `task.anthropic(...)` records a full `messages.create` round trip
-(model, real token usage incl. cache reads, prompt, completion) in one call — see
-[`examples/claude-fleet.mjs`](examples/claude-fleet.mjs), a real 3-agent incident-response fleet
-on the Claude API:
+**Python** — `sdk/python/`, stdlib only
+
+```python
+from fleetglass import Tracer
+
+fg = Tracer(workflow='my-system')
+ai = fg.wrap(genai.Client(api_key=key))               # or the Anthropic / OpenAI client
+
+with fg.task():
+    with fg.agent('planner'):
+        plan = ai.models.generate_content(model=model, contents=contents, config=config)
+    with fg.agent('executor'):
+        fg.emit_tool(tool='run_query', input=q, output=result)
+        ai.models.generate_content(model=model, contents=plan.text, config=config)
+```
+
+`wrap()` auto-captures model, tokens, prompt, completion, cost, and the context breakdown
+(system / history / tools) straight from the client's real response — nothing to compute by hand.
+`agent()` works as both a context manager and, in Python, a decorator. A cross-agent parent link
+(one agent's call following another's within the same task) is what draws a **handoff edge** in
+the graph — nothing configured up front.
+
+Runnable end-to-end fleets, install deps and run directly:
 
 ```sh
 cd examples && npm install
-export ANTHROPIC_API_KEY=sk-ant-...   # or `ant auth login`
-node claude-fleet.mjs
+export GEMINI_API_KEY=...
+node gemini-fleet.mjs "your question"        # or claude-fleet.mjs with ANTHROPIC_API_KEY
+
+cd examples && pip install -r requirements.txt
+export GEMINI_API_KEY=...
+python3 gemini-fleet.py "your question"
 ```
 
 **Other frameworks** (LangGraph, CrewAI, OpenAI Agents SDK): anything that can `POST` OTLP/JSON
@@ -150,28 +171,30 @@ The fleet topology falls out of the traces — nothing is configured up front.
 
 ## 🧱 Architecture
 
-Zero dependencies. Four small files, one clean seam each:
+Zero mandatory dependencies in the control plane. Small files, one clean seam each:
 
 | File | Role |
 |---|---|
 | [`store.js`](store.js) | **Pure core** — normalize OTLP → aggregate per workflow/agent → detect anomalies. Fully unit-tested. |
 | [`server.js`](server.js) | `node:http` — ingest (`POST /v1/traces`), snapshot API, SSE live feed, `POST /api/fork`, static serving. |
 | [`fork.js`](fork.js) | Live re-execution of one recorded step on a different model — the fork-from-step engine. |
-| [`tracer.js`](tracer.js) | Zero-dep client SDK for instrumenting real Node agents. |
+| [`sdk/node/`](sdk/node/) | Zero-dep Node SDK (`createTracer`, `fg.wrap`, `fg.agent`) for instrumenting real agents. |
+| [`sdk/python/`](sdk/python/) | Stdlib-only Python SDK (`Tracer`, `fg.wrap`, `fg.agent`) — same shape. |
 | [`public/`](public/) | Vanilla-JS dashboard — fleet view, graph, inspector, heatmap, replay. No build step. |
-| [`simulator.js`](simulator.js) | OTLP GenAI span generator — the demo fleet. |
+| [`examples/`](examples/) | Runnable fleets against real providers (Gemini, Claude) — the demo path. |
 
 In-memory store, 10-minute rolling window; cumulative totals survive pruning. **Swap for ClickHouse +
 object storage when retention matters** — the store interface is the only thing that changes.
 
-### What's real vs. simulated
+### What's real vs. approximated
 
 - **Real:** the ingest endpoint, normalization, edge derivation, cost math, anomaly detection,
-  replay recording, live fork-from-step, and the SSE feed.
-- **Simulated:** the agents themselves ([`simulator.js`](simulator.js)), and the
-  `fleetglass.context.*_tokens` / `fleetglass.tool.*` attributes — context breakdown and tool
-  payloads aren't in the OTel GenAI semconv yet, so real integrations emit them via the thin SDK
-  wrapper (`gen_ai.prompt` / `gen_ai.completion` are the legacy semconv span attributes).
+  replay recording, live fork-from-step, the SSE feed, and every span emitted by the SDKs —
+  `wrap()` reads real token usage and text straight off the provider response.
+- **Approximated:** the `fleetglass.context.*_tokens` / `fleetglass.tool.*` attributes — context
+  breakdown and tool payloads aren't in the OTel GenAI semconv yet, so the SDKs derive a per-segment
+  token split from real input-token totals and raw prompt/system/history text (`gen_ai.prompt` /
+  `gen_ai.completion` are the legacy semconv span attributes carrying that text).
 
 Prices live in `PRICES` in [`store.js`](store.js) — approximate list prices; edit to match yours.
 

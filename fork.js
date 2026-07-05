@@ -5,7 +5,7 @@
 // Fidelity ceiling: the substrate captures a step's user prompt as text but system/
 // history/retrieval only as token counts, so a fork is faithful to the prompt and
 // approximate on hidden context.
-// ponytail: prompt-only re-execution; record the full messages array in tracer.js
+// ponytail: prompt-only re-execution; record the full messages array in sdk/node/tracer.js
 // for exact re-execution when counterfactual precision matters.
 
 import { callCost } from './store.js';
