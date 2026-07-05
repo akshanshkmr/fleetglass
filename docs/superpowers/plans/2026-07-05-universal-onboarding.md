@@ -540,12 +540,18 @@ packages = ["fleetglass"]
 `sdk/python/fleetglass/tracer.py`:
 ```python
 """FleetGlass Python tracer core: emits FleetGlass JSON spans and threads the
-current agent + parent span through contextvars. Stdlib only."""
-import functools, json, os, queue, secrets, threading, time, urllib.request
+current agent + parent span through contextvars. Stdlib only.
+
+Batching is thread-free and deterministic: spans accumulate on the tracer and
+send on flush() or when the batch hits BATCH_MAX. A lock guards the batch so
+parallel worker threads can share one tracer safely.
+"""
+import functools, json, os, secrets, threading, time, urllib.request
 import contextvars
 from contextlib import contextmanager
 
 _ctx = contextvars.ContextVar("fleetglass_frame", default=None)
+BATCH_MAX = 50  # spans; flush eagerly so a long task streams to the dashboard
 
 def current_frame():
     return _ctx.get()
@@ -564,27 +570,15 @@ class Tracer:
     def __init__(self, endpoint=None, workflow="default"):
         self.endpoint = endpoint or os.environ.get("FLEETGLASS_URL", "http://localhost:4700/v1/traces")
         self.workflow = workflow
-        self._q = queue.Queue()
-        self._stop = object()
-        self._thread = threading.Thread(target=self._worker, daemon=True)
-        self._thread.start()
+        self._batch = []
+        self._lock = threading.Lock()
 
-    def _worker(self):
-        batch = []
-        while True:
-            try:
-                item = self._q.get(timeout=0.3)
-            except queue.Empty:
-                if batch:
-                    self._post(batch); batch = []
-                continue
-            if item is self._stop:
-                if batch:
-                    self._post(batch); batch = []
-                continue
-            batch.append(item)
-            if len(batch) >= 50:
-                self._post(batch); batch = []
+    def _enqueue(self, span):
+        with self._lock:
+            self._batch.append(span)
+            full = len(self._batch) >= BATCH_MAX
+        if full:
+            self.flush()
 
     def _post(self, spans):
         if not spans:
@@ -600,8 +594,9 @@ class Tracer:
             pass  # never break the agent
 
     def flush(self):
-        self._q.put(self._stop)
-        time.sleep(0.05)  # let the worker drain — best-effort
+        with self._lock:
+            spans, self._batch = self._batch, []
+        self._post(spans)  # synchronous → deterministic; Sink overrides _post in tests
 
     def _frame(self):
         f = _ctx.get()
@@ -634,7 +629,7 @@ class Tracer:
         parent = self._parent(f)
         if parent:
             span["parentSpanId"] = parent
-        self._q.put(span)
+        self._enqueue(span)
         f.last = span_id
         return span_id
 
@@ -652,7 +647,7 @@ class Tracer:
         parent = self._parent(f)
         if parent:
             span["parentSpanId"] = parent
-        self._q.put(span)
+        self._enqueue(span)
         f.last = span_id
         return span_id
 
