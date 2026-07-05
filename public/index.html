@@ -216,6 +216,22 @@ main { max-width: 1180px; margin: 0 auto; padding: 20px 22px 48px; }
   white-space: pre-wrap; word-break: break-word; margin: 0;
 }
 #replay-detail .ctxbar { margin-top: 4px; }
+.payload.fork { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 4px; }
+.forkbar { display: flex; gap: 8px; margin-bottom: 8px; }
+.forkbar select {
+  background: var(--ink); color: var(--text); border: 1px solid var(--line);
+  border-radius: 4px; padding: 5px 8px; font: 11.5px "IBM Plex Mono", monospace;
+}
+.forkbar .forkgo {
+  background: var(--wire); color: #fff; border: 0; border-radius: 4px;
+  padding: 5px 14px; font: 500 12px "IBM Plex Sans", sans-serif; cursor: pointer;
+}
+.forkbar .forkgo:hover { filter: brightness(1.1); }
+.forkcmp { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.forknote { margin-top: 8px; font: 11.5px "IBM Plex Mono", monospace; color: var(--dim); }
+.forknote.good { color: var(--ok); }
+.forknote.warn { color: var(--money); }
+.forknote.err { color: var(--signal); }
 </style>
 </head>
 <body>

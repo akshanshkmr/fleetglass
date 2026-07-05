@@ -347,11 +347,50 @@ function renderReplay() {
     ctxWrap.innerHTML = '<div class="k">Context window at this step</div>';
     buildCtx(step.ctx, ctxWrap, true);
     d.appendChild(ctxWrap);
+    d.appendChild(forkPanel(trace.id, idx, step));
   } else {
     block('Tool input', step.input);
     block('Tool output', step.output);
   }
 }
+
+// fork-from-step: re-run this chat step's prompt live on another model, diff the result.
+const FORK_MODELS = ['claude-haiku-4-5', 'claude-sonnet-5', 'claude-opus-4-8'];
+
+function forkPanel(traceId, idx, step) {
+  const wrap = document.createElement('div');
+  wrap.className = 'payload fork';
+  const targets = FORK_MODELS.filter((m) => !step.model.startsWith(m));
+  const sel = targets.map((m) => `<option value="${m}">${m}</option>`).join('');
+  wrap.innerHTML = `<div class="k">Fork from step — re-run this prompt live</div>
+    <div class="forkbar"><select class="forkmodel">${sel}</select><button class="forkgo">Fork ▸</button></div>
+    <div class="forkout"></div>`;
+  const out = wrap.querySelector('.forkout');
+  wrap.querySelector('.forkgo').addEventListener('click', async () => {
+    const model = wrap.querySelector('.forkmodel').value;
+    out.innerHTML = `<div class="forknote">Re-running on ${model}…</div>`;
+    let r;
+    try {
+      const res = await fetch('/api/fork', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: traceId, step: idx, model }) });
+      r = await res.json();
+      if (!res.ok) throw new Error(r.error || 'fork failed');
+    } catch (e) {
+      out.innerHTML = `<div class="forknote err">${e.message}</div>`;
+      return;
+    }
+    const pct = r.original.cost ? Math.round((1 - r.fork.cost / r.original.cost) * 100) : 0;
+    const cheaper = r.deltaCost < 0;
+    out.innerHTML = `
+      <div class="forkcmp">
+        <div><div class="k">Original — ${r.original.model} · ${money(r.original.cost)}</div><pre>${esc(r.original.completion)}</pre></div>
+        <div><div class="k">Fork — ${r.fork.model} · <span class="money">${money(r.fork.cost)}</span></div><pre>${esc(r.fork.completion)}</pre></div>
+      </div>
+      <div class="forknote ${cheaper ? 'good' : 'warn'}">${cheaper ? `${pct}% cheaper` : `${-pct}% costlier`} — ${money(Math.abs(r.deltaCost))}/call. Judge output agreement before you route.</div>`;
+  });
+  return wrap;
+}
+
+const esc = (s) => (s || '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 
 $('replay-close').addEventListener('click', closeReplay);
 $('replay').addEventListener('click', (e) => { if (e.target === $('replay')) closeReplay(); });
