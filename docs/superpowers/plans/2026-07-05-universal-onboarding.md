@@ -826,19 +826,28 @@ def _tools_text(config):
     tools = config.get("tools") if isinstance(config, dict) else getattr(config, "tools", None)
     return "" if not tools else str(tools)
 
+def _safe_emit(tracer, **fields):
+    # Telemetry must never break the agent: a failed emit drops the span, never the call.
+    try:
+        tracer.emit_chat(**fields)
+    except Exception:
+        pass
+
 def _wrap_google(client, tracer):
     real = client.models.generate_content
 
     def traced(model=None, contents=None, config=None, **kw):
         res = real(model=model, contents=contents, config=config, **kw)
         um = getattr(res, "usage_metadata", None)
-        tracer.emit_chat(
+        history = _contents_to_text(contents)
+        _safe_emit(
+            tracer,
             model=getattr(res, "model_version", None) or model or "unknown",
             input_tokens=getattr(um, "prompt_token_count", 0) or 0,
             output_tokens=(getattr(um, "candidates_token_count", 0) or 0) + (getattr(um, "thoughts_token_count", 0) or 0),
-            prompt=_contents_to_text(contents),
+            prompt=history,
             completion=getattr(res, "text", "") or "",
-            context={"system": _sys_text(config), "history": _contents_to_text(contents), "tools": _tools_text(config)},
+            context={"system": _sys_text(config), "history": history, "tools": _tools_text(config)},
         )
         return res
 
@@ -1026,7 +1035,7 @@ function wrapAnthropic(client, fg) {
     return async (params) => {
       const res = await orig(params);
       const u = res.usage || {};
-      fg.emitChat({
+      safeEmit(fg, {
         model: res.model || params.model,
         inputTokens: (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0),
         outputTokens: u.output_tokens || 0,
@@ -1047,7 +1056,7 @@ function wrapOpenAI(client, fg) {
     return async (params) => {
       const res = await orig(params);
       const u = res.usage || {};
-      fg.emitChat({
+      safeEmit(fg, {
         model: res.model || params.model,
         inputTokens: u.prompt_tokens || 0,
         outputTokens: u.completion_tokens || 0,
@@ -1138,7 +1147,8 @@ def _wrap_anthropic(client, tracer):
     def traced(model=None, system=None, messages=None, **kw):
         res = real(model=model, system=system, messages=messages, **kw)
         u = getattr(res, "usage", None)
-        tracer.emit_chat(
+        _safe_emit(
+            tracer,
             model=getattr(res, "model", None) or model or "unknown",
             input_tokens=(getattr(u, "input_tokens", 0) or 0) + (getattr(u, "cache_read_input_tokens", 0) or 0) + (getattr(u, "cache_creation_input_tokens", 0) or 0),
             output_tokens=getattr(u, "output_tokens", 0) or 0,
@@ -1155,7 +1165,8 @@ def _wrap_openai(client, tracer):
     def traced(model=None, messages=None, **kw):
         res = real(model=model, messages=messages, **kw)
         u = getattr(res, "usage", None)
-        tracer.emit_chat(
+        _safe_emit(
+            tracer,
             model=getattr(res, "model", None) or model or "unknown",
             input_tokens=getattr(u, "prompt_tokens", 0) or 0,
             output_tokens=getattr(u, "completion_tokens", 0) or 0,
