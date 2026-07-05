@@ -53,5 +53,46 @@ class TestGoogleAdapter(unittest.TestCase):
         with self.assertRaises(TypeError):
             wrap(object(), Sink())
 
+class FakeAnthropicMsgs:
+    def create(self, model=None, system=None, messages=None, **kw):
+        class R:
+            pass
+        r = R(); r.model = model
+        r.content = [type("B", (), {"type": "text", "text": "hi"})()]
+        r.usage = type("U", (), {"input_tokens": 5, "output_tokens": 3, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0})()
+        return r
+class FakeAnthropic:
+    def __init__(self): self.messages = FakeAnthropicMsgs()
+
+class FakeOpenAICompletions:
+    def create(self, model=None, messages=None, **kw):
+        class R: pass
+        r = R(); r.model = model
+        r.choices = [type("C", (), {"message": type("M", (), {"content": "hi"})()})()]
+        r.usage = type("U", (), {"prompt_tokens": 8, "completion_tokens": 4})()
+        return r
+class FakeOpenAIChat:
+    def __init__(self): self.completions = FakeOpenAICompletions()
+class FakeOpenAI:
+    def __init__(self): self.chat = FakeOpenAIChat()
+
+class TestMoreProviders(unittest.TestCase):
+    def test_anthropic(self):
+        fg = Sink(); client = wrap(FakeAnthropic(), fg)
+        with fg.task():
+            with fg.agent("a"):
+                client.messages.create(model="claude-haiku-4-5", system="sys", messages=[{"role": "user", "content": "q"}])
+        fg.flush()
+        self.assertEqual(attr(fg.sent[0], "gen_ai.request.model"), "claude-haiku-4-5")
+        self.assertEqual(attr(fg.sent[0], "gen_ai.usage.output_tokens", "intValue"), 3)
+    def test_openai(self):
+        fg = Sink(); client = wrap(FakeOpenAI(), fg)
+        with fg.task():
+            with fg.agent("a"):
+                client.chat.completions.create(model="gpt-4o-mini", messages=[{"role": "system", "content": "s"}, {"role": "user", "content": "q"}])
+        fg.flush()
+        self.assertEqual(attr(fg.sent[0], "gen_ai.request.model"), "gpt-4o-mini")
+        self.assertEqual(attr(fg.sent[0], "gen_ai.usage.input_tokens", "intValue"), 8)
+
 if __name__ == "__main__":
     unittest.main()

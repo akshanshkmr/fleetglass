@@ -34,3 +34,33 @@ test('wrap rejects an unknown client', () => {
   const fg = createTracer({ post: async () => {} });
   assert.throws(() => wrap({}, fg), /unrecognized/);
 });
+
+test('wrap(anthropic) emits a chat span', async () => {
+  const sent = [];
+  const fg = createTracer({ post: async (s) => sent.push(...s) });
+  const client = wrap({ messages: { async create(p) {
+    return { model: p.model, content: [{ type: 'text', text: 'hi' }], usage: { input_tokens: 5, output_tokens: 3 } };
+  } } }, fg);
+  await fg.task(() => fg.agent('a', async () => {
+    await client.messages.create({ model: 'claude-haiku-4-5', system: 'sys', messages: [{ role: 'user', content: 'q' }] });
+  }));
+  await fg.flush();
+  const attr = (s, k, t = 'stringValue') => s.attributes.find((a) => a.key === k)?.value?.[t];
+  assert.equal(attr(sent[0], 'gen_ai.request.model'), 'claude-haiku-4-5');
+  assert.equal(attr(sent[0], 'gen_ai.usage.output_tokens', 'intValue'), 3);
+});
+
+test('wrap(openai) emits a chat span', async () => {
+  const sent = [];
+  const fg = createTracer({ post: async (s) => sent.push(...s) });
+  const client = wrap({ chat: { completions: { async create(p) {
+    return { model: p.model, choices: [{ message: { content: 'hi' } }], usage: { prompt_tokens: 8, completion_tokens: 4 } };
+  } } } }, fg);
+  await fg.task(() => fg.agent('a', async () => {
+    await client.chat.completions.create({ model: 'gpt-4o-mini', messages: [{ role: 'system', content: 'sys' }, { role: 'user', content: 'q' }] });
+  }));
+  await fg.flush();
+  const attr = (s, k, t = 'stringValue') => s.attributes.find((a) => a.key === k)?.value?.[t];
+  assert.equal(attr(sent[0], 'gen_ai.request.model'), 'gpt-4o-mini');
+  assert.equal(attr(sent[0], 'gen_ai.usage.input_tokens', 'intValue'), 8);
+});
