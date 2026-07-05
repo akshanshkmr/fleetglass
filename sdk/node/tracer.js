@@ -2,6 +2,7 @@
 // current agent + parent span through AsyncLocalStorage so provider adapters
 // and agent() scopes need no explicit wiring.
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { wrap as wrapClient } from './adapters.js';
 
 const als = new AsyncLocalStorage();
 export const currentFrame = () => als.getStore();
@@ -100,5 +101,6 @@ export function createTracer({ endpoint = process.env.FLEETGLASS_URL || 'http://
   }
 
   const api = { task, agent, withAgent: agent, emitChat, emitTool, flush };
+  api.wrap = (client) => wrapClient(client, api);
   return api;
 }
