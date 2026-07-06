@@ -1,5 +1,10 @@
 """Provider adapters: wrap(client) returns the same client with its completion
 method intercepted to auto-capture spans onto the tracer."""
+import weakref
+
+# Idempotency: wrap() monkey-patches the client in place, so re-wrapping would
+# patch the patched method and double-emit. Track wrapped clients and no-op on re-wrap.
+_wrapped = weakref.WeakSet()
 
 def _contents_to_text(contents):
     if isinstance(contents, str):
@@ -110,13 +115,19 @@ def _wrap_openai(client, tracer):
     return client
 
 def wrap(client, tracer):
+    if client in _wrapped:
+        return client
     models = getattr(client, "models", None)
     if models is not None and hasattr(models, "generate_content"):
-        return _wrap_google(client, tracer)
-    messages = getattr(client, "messages", None)
-    if messages is not None and hasattr(messages, "create"):
-        return _wrap_anthropic(client, tracer)
-    chat = getattr(client, "chat", None)
-    if chat is not None and hasattr(getattr(chat, "completions", None), "create"):
-        return _wrap_openai(client, tracer)
-    raise TypeError("fleetglass: unrecognized client (google-genai / anthropic / openai)")
+        wrapped = _wrap_google(client, tracer)
+    else:
+        messages = getattr(client, "messages", None)
+        chat = getattr(client, "chat", None)
+        if messages is not None and hasattr(messages, "create"):
+            wrapped = _wrap_anthropic(client, tracer)
+        elif chat is not None and hasattr(getattr(chat, "completions", None), "create"):
+            wrapped = _wrap_openai(client, tracer)
+        else:
+            raise TypeError("fleetglass: unrecognized client (google-genai / anthropic / openai)")
+    _wrapped.add(wrapped)
+    return wrapped

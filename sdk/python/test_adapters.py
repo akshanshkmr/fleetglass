@@ -53,6 +53,38 @@ class TestGoogleAdapter(unittest.TestCase):
         with self.assertRaises(TypeError):
             wrap(object(), Sink())
 
+    def test_wrap_idempotent(self):
+        fg = Sink()
+        client = FakeClient()
+        once = wrap(client, fg)
+        twice = wrap(once, fg)           # re-wrap the already-wrapped client
+        self.assertIs(twice, once)
+        with fg.task():
+            with fg.agent("a"):
+                once.models.generate_content(model="m", contents="x")
+        fg.flush()
+        self.assertEqual(len(fg.sent), 1)  # exactly one span, not two
+
+    def test_missing_usage_metadata(self):
+        fg = Sink()
+        class Resp:
+            text = "hi"                   # no usage_metadata, no model_version
+        class Models:
+            def generate_content(self, model=None, contents=None, config=None):
+                return Resp()
+        class Client:
+            def __init__(self):
+                self.models = Models()
+        client = wrap(Client(), fg)
+        with fg.task():
+            with fg.agent("a"):
+                client.models.generate_content(model="m", contents="x")
+        fg.flush()
+        span = fg.sent[0]
+        self.assertEqual(attr(span, "gen_ai.usage.input_tokens", "intValue"), 0)
+        self.assertEqual(attr(span, "gen_ai.usage.output_tokens", "intValue"), 0)
+        self.assertEqual(attr(span, "gen_ai.completion"), "hi")
+
 class FakeAnthropicMsgs:
     def create(self, model=None, system=None, messages=None, **kw):
         class R:
