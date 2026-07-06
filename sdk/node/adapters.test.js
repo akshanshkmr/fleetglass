@@ -35,6 +35,29 @@ test('wrap rejects an unknown client', () => {
   assert.throws(() => wrap({}, fg), /unrecognized/);
 });
 
+test('wrap is idempotent — re-wrapping does not double-emit', async () => {
+  const sent = [];
+  const fg = createTracer({ post: async (s) => sent.push(...s) });
+  const once = wrap(fakeGoogle(), fg);
+  const twice = wrap(once, fg);           // re-wrap the already-wrapped client
+  assert.equal(twice, once, 're-wrap returns the same proxy');
+  await fg.task(() => fg.agent('a', () => twice.models.generateContent({ model: 'm', contents: 'x' })));
+  await fg.flush();
+  assert.equal(sent.length, 1, 'exactly one span, not two');
+});
+
+test('wrap(google) tolerates a response with no usageMetadata', async () => {
+  const sent = [];
+  const fg = createTracer({ post: async (s) => sent.push(...s) });
+  const client = wrap({ models: { async generateContent() { return { text: 'hi' }; } } }, fg);
+  await fg.task(() => fg.agent('a', () => client.models.generateContent({ model: 'm', contents: 'x' })));
+  await fg.flush();
+  const attr = (s, k, t = 'stringValue') => s.attributes.find((a) => a.key === k)?.value?.[t];
+  assert.equal(attr(sent[0], 'gen_ai.usage.input_tokens', 'intValue'), 0);
+  assert.equal(attr(sent[0], 'gen_ai.usage.output_tokens', 'intValue'), 0);
+  assert.equal(attr(sent[0], 'gen_ai.completion'), 'hi');
+});
+
 test('wrap(anthropic) emits a chat span', async () => {
   const sent = [];
   const fg = createTracer({ post: async (s) => sent.push(...s) });

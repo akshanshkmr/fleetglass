@@ -99,9 +99,17 @@ function wrapOpenAI(client, fg) {
   return new Proxy(client, { get(t, p) { return p === 'chat' ? chat : t[p]; } });
 }
 
+// Idempotency: re-wrapping an already-wrapped client would stack emits.
+// Mark the proxies we return and no-op on re-wrap.
+const wrapped = new WeakSet();
+
 export function wrap(client, fg) {
-  if (client?.models?.generateContent) return wrapGoogle(client, fg);
-  if (client?.messages?.create) return wrapAnthropic(client, fg);
-  if (client?.chat?.completions?.create) return wrapOpenAI(client, fg);
-  throw new Error('fleetglass: unrecognized client (google-genai / anthropic / openai)');
+  if (wrapped.has(client)) return client;
+  let proxy;
+  if (client?.models?.generateContent) proxy = wrapGoogle(client, fg);
+  else if (client?.messages?.create) proxy = wrapAnthropic(client, fg);
+  else if (client?.chat?.completions?.create) proxy = wrapOpenAI(client, fg);
+  else throw new Error('fleetglass: unrecognized client (google-genai / anthropic / openai)');
+  wrapped.add(proxy);
+  return proxy;
 }
