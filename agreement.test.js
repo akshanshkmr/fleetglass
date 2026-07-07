@@ -28,3 +28,19 @@ test('score: free text with no judge → method none, score 0', async () => {
   const r = await score('a', 'b');
   assert.deepEqual(r, { score: 0, method: 'none' });
 });
+
+test('structuralScore is case- and whitespace-insensitive on string leaves', () => {
+  assert.equal(structuralScore({ category: 'Billing', p: ' high ' }, { category: 'billing', p: 'high' }), 1);
+});
+
+test('structuralScore keeps distinct types distinct (1 vs "1" do not match)', () => {
+  assert.equal(structuralScore({ n: 1 }, { n: '1' }), 0);
+});
+
+test('score treats a markdown-fenced JSON reply as JSON (structural, judge not called)', async () => {
+  let judged = false;
+  const r = await score('```json\n{"x": 1}\n```', '{"x": 1}', { judge: async () => { judged = true; return 0; } });
+  assert.equal(r.method, 'structural');
+  assert.equal(r.score, 1);
+  assert.equal(judged, false);
+});

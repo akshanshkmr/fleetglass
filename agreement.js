@@ -16,11 +16,15 @@ export function structuralScore(a, b) {
   const lb = leaves(b, '', {});
   const keys = Object.keys(la);
   if (!keys.length) return Object.keys(lb).length ? 0 : 1;
-  const matched = keys.filter((k) => Object.prototype.hasOwnProperty.call(lb, k) && lb[k] === la[k]).length;
+  const norm = (v) => (typeof v === 'string' ? v.trim().toLowerCase() : v);
+  const matched = keys.filter((k) => Object.prototype.hasOwnProperty.call(lb, k) && norm(lb[k]) === norm(la[k])).length;
   return matched / keys.length;
 }
 
-function asJson(s) { try { return JSON.parse(s); } catch { return undefined; } }
+function asJson(s) {
+  const t = String(s).trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  try { return JSON.parse(t); } catch { return undefined; }
+}
 
 export async function score(original, fork, { judge } = {}) {
   const a = asJson(original);
