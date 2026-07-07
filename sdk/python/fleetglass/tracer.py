@@ -26,9 +26,12 @@ def _context_tokens(segments, input_tokens):
     return {k: round(n / total * input_tokens) for k, n in chars.items()}
 
 class Tracer:
-    def __init__(self, endpoint=None, workflow="default"):
+    def __init__(self, endpoint=None, workflow="default", capture_requests=False, redact=None, max_request_bytes=16000):
         self.endpoint = endpoint or os.environ.get("FLEETGLASS_URL", "http://localhost:4700/v1/traces")
         self.workflow = workflow
+        self.capture_requests = capture_requests
+        self.redact = redact or (lambda r: r)
+        self.max_request_bytes = max_request_bytes
         self._batch = []
         self._lock = threading.Lock()
 
@@ -66,7 +69,7 @@ class Tracer:
     def _parent(self, f):
         return f.last or f.anchor
 
-    def emit_chat(self, model="unknown", input_tokens=0, output_tokens=0, prompt="", completion="", context=None):
+    def emit_chat(self, model="unknown", input_tokens=0, output_tokens=0, prompt="", completion="", context=None, request=None):
         f = self._frame()
         span_id = secrets.token_hex(8)
         attrs = [
@@ -83,6 +86,12 @@ class Tracer:
         if context:
             for k, v in _context_tokens(context, input_tokens).items():
                 attrs.append({"key": f"fleetglass.context.{k}_tokens", "value": {"intValue": v}})
+        if self.capture_requests and request is not None:
+            try:
+                blob = json.dumps(self.redact(request))[: self.max_request_bytes]
+                attrs.append({"key": "fleetglass.request", "value": {"stringValue": blob}})
+            except Exception:
+                pass
         span = {"traceId": f.trace, "spanId": span_id, "name": f"chat {model}",
                 "startTimeUnixNano": str(time.time_ns()), "attributes": attrs}
         parent = self._parent(f)

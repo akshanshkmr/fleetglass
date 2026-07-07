@@ -38,6 +38,32 @@ def _tools_text(config):
     tools = config.get("tools") if isinstance(config, dict) else getattr(config, "tools", None)
     return "" if not tools else str(tools)
 
+def _google_messages(contents):
+    if isinstance(contents, str):
+        return [{"role": "user", "content": contents}]
+    if not isinstance(contents, (list, tuple)):
+        return []
+    out = []
+    for c in contents:
+        if isinstance(c, str):
+            out.append({"role": "user", "content": c})
+        else:
+            parts = getattr(c, "parts", None) or (c.get("parts") if isinstance(c, dict) else None) or []
+            role = getattr(c, "role", None) or (c.get("role") if isinstance(c, dict) else None)
+            text = "".join((getattr(p, "text", None) or (p.get("text") if isinstance(p, dict) else "") or "") for p in parts)
+            out.append({"role": "assistant" if role == "model" else "user", "content": text})
+    return out
+
+def _plain_messages(messages):
+    out = []
+    for m in messages or []:
+        if m.get("role") == "system":
+            continue
+        c = m.get("content")
+        out.append({"role": "assistant" if m.get("role") == "assistant" else "user",
+                    "content": c if isinstance(c, str) else ""})
+    return out
+
 def _safe_emit(tracer, **fields):
     # Telemetry must never break the agent: a failed emit drops the span, never the call.
     try:
@@ -60,6 +86,7 @@ def _wrap_google(client, tracer):
             prompt=history,
             completion=getattr(res, "text", "") or "",
             context={"system": _sys_text(config), "history": history, "tools": _tools_text(config)},
+            request={"system": _sys_text(config), "messages": _google_messages(contents), "tools": (config or {}).get("tools") if isinstance(config, dict) else getattr(config, "tools", None)},
         )
         return res
 
@@ -91,6 +118,7 @@ def _wrap_anthropic(client, tracer):
             prompt=_msgs_text(messages),
             completion="".join(getattr(b, "text", "") for b in getattr(res, "content", []) if getattr(b, "type", "") == "text"),
             context={"system": system or "", "history": _msgs_text(messages), "tools": str(kw.get("tools") or "")},
+            request={"system": system or "", "messages": _plain_messages(messages), "tools": kw.get("tools")},
         )
         return res
     client.messages.create = traced
@@ -109,6 +137,7 @@ def _wrap_openai(client, tracer):
             prompt=_msgs_text(messages),
             completion=(res.choices[0].message.content if getattr(res, "choices", None) else "") or "",
             context={"system": _sys_from_messages(messages), "history": _msgs_text(messages), "tools": str(kw.get("tools") or "")},
+            request={"system": _sys_from_messages(messages), "messages": _plain_messages(messages), "tools": kw.get("tools")},
         )
         return res
     client.chat.completions.create = traced

@@ -1,4 +1,5 @@
 import unittest
+import json
 from fleetglass.tracer import Tracer
 from fleetglass.adapters import wrap
 
@@ -125,6 +126,30 @@ class TestMoreProviders(unittest.TestCase):
         fg.flush()
         self.assertEqual(attr(fg.sent[0], "gen_ai.request.model"), "gpt-4o-mini")
         self.assertEqual(attr(fg.sent[0], "gen_ai.usage.input_tokens", "intValue"), 8)
+
+class TestCapture(unittest.TestCase):
+    def test_google_captures_canonical_request(self):
+        fg = Sink(); fg.capture_requests = True
+        client = wrap(FakeClient(), fg)
+        with fg.task():
+            with fg.agent("a"):
+                client.models.generate_content(model="gemini-2.5-flash", contents="question one",
+                                               config={"system_instruction": "be brief", "tools": [{"name": "t"}]})
+        fg.flush()
+        raw = attr(fg.sent[0], "fleetglass.request")
+        self.assertIsNotNone(raw)
+        req = json.loads(raw)
+        self.assertEqual(req["system"], "be brief")
+        self.assertEqual(req["messages"], [{"role": "user", "content": "question one"}])
+
+    def test_no_capture_by_default(self):
+        fg = Sink()
+        client = wrap(FakeClient(), fg)
+        with fg.task():
+            with fg.agent("a"):
+                client.models.generate_content(model="m", contents="x")
+        fg.flush()
+        self.assertIsNone(attr(fg.sent[0], "fleetglass.request"))
 
 if __name__ == "__main__":
     unittest.main()
