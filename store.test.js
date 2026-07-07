@@ -42,7 +42,7 @@ test('ingest normalizes spans, derives edges, computes cost', () => {
   const wf = snap.workflows[0];
   assert.equal(wf.name, 'default'); // no service.name resource attr
   assert.equal(wf.agents.length, 2);
-  assert.deepEqual(wf.edges, [{ from: 'orchestrator', to: 'researcher', rpm: 1 }]);
+  assert.deepEqual(wf.edges, [{ from: 'orchestrator', to: 'researcher', rpm: 1, pathology: false }]);
   const orch = wf.agents.find((a) => a.name === 'orchestrator');
   assert.ok(Math.abs(orch.spend - (3000 * 5 + 300 * 25) / 1e6) < 1e-9);
   assert.equal(snap.totals.tasksPerMin, 1);
@@ -149,6 +149,31 @@ test('anomaly fires when recent cost/call doubles vs baseline', () => {
   }
   calm.ingest(batch(calmSpans));
   assert.equal(calm.snapshot(NOW).alerts.length, 0);
+});
+
+test('snapshot flags a ping-pong trace as a cycle pathology', () => {
+  const store = createStore();
+  const spans = [];
+  const base = Date.now() - 1000;
+  for (let i = 0; i < 8; i++) {
+    spans.push(chatSpan({
+      ts: base + i * 100,
+      trace: 'tRACE1',
+      spanId: 's' + i,
+      parent: i ? 's' + (i - 1) : undefined,
+      agent: i % 2 ? 'critic' : 'researcher',
+      model: 'claude-opus-4-8',
+      inTok: 100,
+      outTok: 10,
+    }));
+  }
+  store.ingest(batch(spans, 'wf'));
+  const snap = store.snapshot();
+  const cyc = snap.pathologies.find((p) => p.kind === 'cycle');
+  assert.ok(cyc, 'cycle pathology present');
+  assert.equal(cyc.workflow, 'wf');
+  assert.deepEqual(cyc.agents.sort(), ['critic', 'researcher']);
+  assert.ok(snap.workflows[0].agents.find((a) => a.name === 'researcher').pathology, 'agent flagged');
 });
 
 test('agentSteps returns an agent\'s chat steps with captured requests', () => {

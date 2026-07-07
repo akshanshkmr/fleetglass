@@ -4,6 +4,8 @@
 // aggregates across all of them.
 // ponytail: in-memory + 10min window; swap for ClickHouse when retention matters.
 
+import { detectPathologies } from './pathology.js';
+
 export const PRICES = {
   // $ per Mtok [input, output] — list prices as of mid-2026, adjust as needed
   'claude-fable-5': [10, 50],
@@ -177,6 +179,17 @@ export function createStore() {
     const minCut = now - 60 * 1000;
     const recentCut = now - RECENT_MS;
 
+    const pathologies = [];
+    const pathoAgents = new Map(); // wf -> Set(agent)
+    for (const [id, t] of traces) {
+      for (const f of detectPathologies(t, now)) {
+        pathologies.push({ workflow: t.wf, trace: id, ...f });
+        let set = pathoAgents.get(t.wf);
+        if (!set) { set = new Set(); pathoAgents.set(t.wf, set); }
+        for (const ag of f.agents) set.add(ag);
+      }
+    }
+
     // per-workflow live stats, seeded from cumulative so idle agents stay listed
     const wfStats = new Map();
     for (const [wf, cum] of cumulative) {
@@ -223,6 +236,7 @@ export function createStore() {
           ctx: a.ctx,
           live: now - a.lastSeen < 10 * 1000,
           alert: firing,
+          pathology: pathoAgents.get(wf)?.has(name) || false,
         });
       }
       agents.sort((x, y) => y.spend - x.spend);
@@ -233,9 +247,10 @@ export function createStore() {
         const k = l.from + ' ' + l.to;
         edgeCount.set(k, (edgeCount.get(k) || 0) + 1);
       }
+      const pset = pathoAgents.get(wf);
       const edges = [...edgeCount].map(([k, n]) => {
         const [from, to] = k.split(' ');
-        return { from, to, rpm: n };
+        return { from, to, rpm: n, pathology: !!(pset && pset.has(from) && pset.has(to)) };
       });
 
       workflows.push({
@@ -247,6 +262,7 @@ export function createStore() {
         live: agents.some((a) => a.live),
         agents,
         edges,
+        pathologies: pathologies.filter((p) => p.workflow === wf).length,
       });
     }
     workflows.sort((x, y) => y.spend - x.spend);
@@ -261,9 +277,11 @@ export function createStore() {
         workflows: workflows.length,
         agents: sum((w) => w.agents.filter((a) => a.live).length),
         alerts: alerts.length,
+        pathologies: pathologies.length,
       },
       workflows,
       alerts,
+      pathologies,
     };
   }
 
