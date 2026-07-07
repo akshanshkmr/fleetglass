@@ -412,7 +412,7 @@ $('savings-run').addEventListener('click', async () => {
   out.innerHTML = `<div class="savings-head">Recoverable ≈ ${money(yr)}/yr · agent ${job.agent}</div>` +
     (job.findings || []).map((f) => {
       const pct = Math.round(f.agreement * 100);
-      return `<div class="savings-row"><span>${f.from.replace(/^(claude|gemini)-/, '')} → ${f.to.replace(/^(claude|gemini)-/, '')}${f.fidelity === 'cross-provider' ? ' ~' : ''}</span>` +
+      return `<div class="savings-row"><span>${(f.from || '?').replace(/^(claude|gemini)-/, '')} → ${(f.to || '?').replace(/^(claude|gemini)-/, '')}${f.fidelity === 'cross-provider' ? ' ~' : ''}</span>` +
         `<span class="agree ${f.pass ? '' : 'warn'}">${pct}%</span>` +
         `<span class="save">${money(f.savingsPerMo)}/mo</span></div>`;
     }).join('') +

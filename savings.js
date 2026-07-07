@@ -9,6 +9,17 @@ export function sampleSteps(steps, n = 8) {
   return steps.filter((s) => s.kind === 'chat' && s.request?.messages?.length).slice(-n);
 }
 
+// Project the agent's monthly call volume from its retained steps and their real
+// timespan — stable vs a 60-second snapshot count, and non-zero whenever there is
+// history. Span floored at 1 minute so a tight burst doesn't over-extrapolate.
+// ponytail: timespan heuristic; swap for a billing-accurate rate when volume matters.
+export function projectCallsPerMonth(steps) {
+  if (!steps || !steps.length) return 0;
+  const first = steps[0].ts, last = steps[steps.length - 1].ts;
+  const spanMin = last > first ? (last - first) / 60000 : 1;
+  return Math.round((steps.length / Math.max(spanMin, 1)) * 60 * 24 * 30);
+}
+
 export async function analyze({ steps, agent, targets, callsPerMonth, fork, score, passBar = 0.95 }) {
   const sample = sampleSteps(steps);
   const originModel = sample[0]?.model;

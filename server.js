@@ -4,7 +4,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createStore } from './store.js';
 import { forkStep, keyFor } from './fork.js';
-import { analyze } from './savings.js';
+import { analyze, projectCallsPerMonth } from './savings.js';
 import { makeJudge } from './judge.js';
 import { score as scoreFn } from './agreement.js';
 import { providerOf } from './translate.js';
@@ -67,7 +67,7 @@ const server = http.createServer(async (req, res) => {
       if (!agentRow) { res.writeHead(404, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'unknown agent' })); return; }
       const steps = store.agentSteps(params.workflow, agentName);
       const targets = (params.targets || DEFAULT_TARGETS).filter((t) => !steps[0] || t.model !== steps[0].model);
-      const callsPerMonth = (agentRow.callsPerMin || 0) * 60 * 24 * 30;
+      const callsPerMonth = projectCallsPerMonth(steps);
       const judgeKey = keyFor(providerOf(JUDGE_MODEL));
       const judge = judgeKey ? makeJudge({ model: JUDGE_MODEL, key: judgeKey }) : null;
       const score = (a, b) => scoreFn(a, b, judge ? { judge } : {});
