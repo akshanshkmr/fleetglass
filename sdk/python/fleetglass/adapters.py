@@ -38,6 +38,7 @@ def _tools_text(config):
     tools = config.get("tools") if isinstance(config, dict) else getattr(config, "tools", None)
     return "" if not tools else str(tools)
 
+# ponytail: canonical capture is text-only — multimodal and tool-result content blocks are dropped; full-fidelity capture is a later milestone.
 def _google_messages(contents):
     if isinstance(contents, str):
         return [{"role": "user", "content": contents}]

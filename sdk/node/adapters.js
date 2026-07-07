@@ -13,6 +13,7 @@ function contentsToText(contents) {
 }
 
 // Provider request → canonical { system, messages:[{role,content}], tools }.
+// ponytail: canonical capture is text-only — multimodal and tool-result content blocks are dropped; full-fidelity capture is a later milestone.
 function googleMessages(contents) {
   if (typeof contents === 'string') return [{ role: 'user', content: contents }];
   if (!Array.isArray(contents)) return [];

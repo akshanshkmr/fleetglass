@@ -30,3 +30,27 @@ test('forkStep errors NO_KEY when the target provider key is missing', async () 
   delete process.env.OPENAI_API_KEY;
   await assert.rejects(forkStep(step, { model: 'gpt-4o-mini' }, async () => ({})), /OPENAI_API_KEY/);
 });
+
+test('cross-provider fork drops tools (avoids a mismatched schema 400)', async () => {
+  process.env.GEMINI_API_KEY = 'test-key';
+  const toolStep = { kind: 'chat', model: 'claude-opus-4-8', out: 200, cost: 1, completion: 'o',
+    request: { system: 's', messages: [{ role: 'user', content: 'q' }], tools: [{ name: 'search' }] } };
+  let seen;
+  const call = async (url, headers, body) => { seen = body; return { candidates: [{ content: { parts: [{ text: 'a' }] } }], usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 } }; };
+  await forkStep(toolStep, { model: 'gemini-2.5-flash' }, call);
+  assert.equal(seen.tools, undefined, 'tools dropped cross-provider');
+});
+
+test('same-provider fork keeps tools verbatim', async () => {
+  process.env.ANTHROPIC_API_KEY = 'test-key';
+  const toolStep = { kind: 'chat', model: 'claude-opus-4-8', out: 200, cost: 1, completion: 'o',
+    request: { system: 's', messages: [{ role: 'user', content: 'q' }], tools: [{ name: 'search' }] } };
+  let seen;
+  const call = async (url, headers, body) => { seen = body; return { content: [{ type: 'text', text: 'a' }], usage: { input_tokens: 10, output_tokens: 5 } }; };
+  await forkStep(toolStep, { model: 'claude-haiku-4-5' }, call);
+  assert.deepEqual(seen.tools, [{ name: 'search' }], 'tools kept same-provider');
+});
+
+test('forkStep rejects an empty messages array', async () => {
+  await assert.rejects(forkStep({ kind: 'chat', model: 'claude-opus-4-8', request: { messages: [] } }, { model: 'claude-haiku-4-5' }, async () => ({})), /captured request/);
+});

@@ -17,7 +17,7 @@ async function httpCall(url, headers, body) {
 // `call` is injectable so tests run without a network/key.
 export async function forkStep(step, target, call = httpCall) {
   if (!step || step.kind !== 'chat') throw new Error('can only fork a chat step');
-  if (!step.request || !step.request.messages) throw new Error('step has no captured request — enable captureRequests to fork faithfully');
+  if (!step.request || !step.request.messages?.length) throw new Error('step has no captured request — enable captureRequests to fork faithfully');
   const model = target.model;
   const provider = target.provider || providerOf(model);
   if (!provider) throw new Error(`unknown provider for model ${model}`);
@@ -25,7 +25,11 @@ export async function forkStep(step, target, call = httpCall) {
   if (!key) { const e = new Error(`${KEY_ENV[provider]} not set on the control plane`); e.code = 'NO_KEY'; throw e; }
 
   const maxTokens = Math.max(256, Math.min(4096, step.out || 1024));
-  const { url, headers, body } = toProvider(step.request, { provider, model, maxTokens, key });
+  const originProvider = providerOf(step.model);
+  // tools schemas are provider-specific — drop them cross-provider rather than send a mismatched shape (400).
+  // ponytail: same-provider keeps tools verbatim; faithful cross-provider tool translation is a later milestone.
+  const req = (originProvider && originProvider !== provider) ? { ...step.request, tools: undefined } : step.request;
+  const { url, headers, body } = toProvider(req, { provider, model, maxTokens, key });
   const data = await call(url, headers, body);
   const { completion, inTok, outTok } = parseResponse(provider, data);
   const cost = callCost(model, inTok, outTok);

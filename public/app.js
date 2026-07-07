@@ -371,8 +371,7 @@ function forkPanel(traceId, idx, step) {
     out.innerHTML = `<div class="forknote">Re-running on ${model}…</div>`;
     let r;
     try {
-      const provider = model.startsWith('claude-') ? 'anthropic' : model.startsWith('gpt-') || model.startsWith('o4') ? 'openai' : 'google';
-      const res = await fetch('/api/fork', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: traceId, step: idx, model, provider }) });
+      const res = await fetch('/api/fork', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: traceId, step: idx, model }) });
       r = await res.json();
       if (!res.ok) throw new Error(r.error || 'fork failed');
     } catch (e) {
