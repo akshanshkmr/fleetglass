@@ -239,6 +239,9 @@ main { max-width: 1180px; margin: 0 auto; padding: 20px 22px 48px; }
 .savings-row .agree { color: var(--ok); } .savings-row .agree.warn { color: var(--money); }
 .savings-row .save { color: var(--money); text-align: right; }
 .savings-note { font: 11px "IBM Plex Mono", monospace; color: var(--dim); margin-top: 8px; }
+
+#context-panel .btn { background: var(--violet); color: #120a24; border: 0; border-radius: 6px; padding: 7px 13px; font: 500 12.5px "IBM Plex Sans", sans-serif; cursor: pointer; }
+.context-head { font: 13px "IBM Plex Mono", monospace; color: var(--violet); margin: 10px 0; }
 </style>
 </head>
 <body>
@@ -288,6 +291,11 @@ main { max-width: 1180px; margin: 0 auto; padding: 20px 22px 48px; }
         <h2>Savings report</h2>
         <button id="savings-run" class="btn">Analyze savings</button>
         <div id="savings-out"></div>
+      </div>
+      <div class="panel" id="context-panel">
+        <h2>Context ROI</h2>
+        <button id="context-run" class="btn">Analyze context</button>
+        <div id="context-out"></div>
       </div>
     </div>
   </div>

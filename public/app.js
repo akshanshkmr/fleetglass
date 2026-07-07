@@ -419,6 +419,33 @@ $('savings-run').addEventListener('click', async () => {
     `<div class="savings-note">~ = cross-provider (tools dropped). Agreement measured on ${(job.findings?.[0]?.samples) || 0} sampled calls. Advisory — nothing changed in your system.</div>`;
 });
 
+// context ROI report: re-run calls with each context segment (tools/system/history) removed.
+$('context-run').addEventListener('click', async () => {
+  const wf = selectedWf;
+  const out = $('context-out');
+  out.innerHTML = '<div class="savings-note">Re-running calls with each context segment removed…</div>';
+  let job;
+  try {
+    const { id } = await (await fetch('/api/context-roi', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow: wf }) })).json();
+    for (let i = 0; i < 60; i++) {
+      await new Promise((r) => setTimeout(r, 1000));
+      job = await (await fetch('/api/context-roi?id=' + id)).json();
+      if (job.status !== 'running') break;
+    }
+  } catch (e) { out.innerHTML = `<div class="savings-note">${e.message}</div>`; return; }
+  if (!job || job.status === 'error') { out.innerHTML = `<div class="savings-note">${job?.error || 'analysis failed'}</div>`; return; }
+  const pass = (job.findings || []).filter((f) => f.pass && f.savingsPerMo > 0);
+  const yr = pass.reduce((s, f) => s + f.savingsPerMo, 0) * 12;
+  out.innerHTML = `<div class="context-head">Trimmable ≈ ${money(yr)}/yr · agent ${job.agent}</div>` +
+    (job.findings || []).map((f) => {
+      const pct = Math.round(f.agreement * 100);
+      return `<div class="savings-row"><span>drop ${f.segment}</span>` +
+        `<span class="agree ${f.pass ? '' : 'warn'}">${pct}%</span>` +
+        `<span class="save">${money(f.savingsPerMo)}/mo</span></div>`;
+    }).join('') +
+    `<div class="savings-note">A below-bar segment changes output if removed — keep it. Advisory only.</div>`;
+});
+
 $('replay-close').addEventListener('click', closeReplay);
 $('replay').addEventListener('click', (e) => { if (e.target === $('replay')) closeReplay(); });
 $('replay-scrub').addEventListener('input', (e) => { if (replay) { replay.idx = Number(e.target.value); renderReplay(); } });
