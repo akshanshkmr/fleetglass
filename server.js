@@ -9,6 +9,7 @@ import { makeJudge } from './judge.js';
 import { score as scoreFn } from './agreement.js';
 import { providerOf } from './translate.js';
 import { analyzeContext } from './contextroi.js';
+import { analyzeRegression } from './regression.js';
 
 const PORT = process.env.PORT || 4700;
 const PUB = join(dirname(fileURLToPath(import.meta.url)), 'public');
@@ -18,6 +19,7 @@ const store = createStore();
 const sseClients = new Set();
 const savingsJobs = new Map(); // id -> { status, findings, error }
 const contextJobs = new Map();
+const regressionJobs = new Map();
 const DEFAULT_TARGETS = [{ model: 'claude-haiku-4-5' }, { model: 'gpt-4o-mini' }, { model: 'gemini-2.5-flash' }];
 const JUDGE_MODEL = process.env.JUDGE_MODEL || 'gemini-2.5-flash';
 
@@ -120,6 +122,41 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === '/api/context-roi') { // GET poll
     const job = contextJobs.get(url.searchParams.get('id'));
+    if (!job) { res.writeHead(404).end('{}'); return; }
+    res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(job));
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/regression') {
+    let body = '';
+    req.on('data', (c) => { body += c; if (body.length > 1e6) req.destroy(); });
+    req.on('end', () => {
+      let params; try { params = JSON.parse(body); } catch { res.writeHead(400).end('{}'); return; }
+      if (!params.newSystem || !String(params.newSystem).trim()) { res.writeHead(400, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'newSystem prompt required' })); return; }
+      const snap = store.snapshot();
+      const wf = snap.workflows.find((w) => w.name === params.workflow);
+      if (!wf) { res.writeHead(404, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'unknown workflow' })); return; }
+      const agentName = params.agent || (wf.agents[0] && wf.agents[0].name);
+      const agentRow = wf.agents.find((a) => a.name === agentName);
+      if (!agentRow) { res.writeHead(404, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'unknown agent' })); return; }
+      const steps = store.agentSteps(params.workflow, agentName);
+      const callsPerMonth = projectCallsPerMonth(steps);
+      const judgeKey = keyFor(providerOf(JUDGE_MODEL));
+      const judge = judgeKey ? makeJudge({ model: JUDGE_MODEL, key: judgeKey }) : null;
+      const score = (a, b) => scoreFn(a, b, judge ? { judge } : {});
+
+      const id = Math.random().toString(16).slice(2, 10);
+      regressionJobs.set(id, { status: 'running' });
+      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ id }));
+      analyzeRegression({ steps, agent: agentName, newSystem: params.newSystem, callsPerMonth, fork: forkStep, score })
+        .then((result) => regressionJobs.set(id, { status: 'done', agent: agentName, result }))
+        .catch((e) => regressionJobs.set(id, { status: 'error', error: e.message }));
+    });
+    return;
+  }
+
+  if (url.pathname === '/api/regression') { // GET poll
+    const job = regressionJobs.get(url.searchParams.get('id'));
     if (!job) { res.writeHead(404).end('{}'); return; }
     res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(job));
     return;
