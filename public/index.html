@@ -232,6 +232,13 @@ main { max-width: 1180px; margin: 0 auto; padding: 20px 22px 48px; }
 .forknote.good { color: var(--ok); }
 .forknote.warn { color: var(--money); }
 .forknote.err { color: var(--signal); }
+
+#savings-panel .btn { background: var(--ok); color: #06231a; border: 0; border-radius: 6px; padding: 7px 13px; font: 500 12.5px "IBM Plex Sans", sans-serif; cursor: pointer; }
+.savings-head { font: 13px "IBM Plex Mono", monospace; color: var(--ok); margin: 10px 0; }
+.savings-row { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; font: 11.5px "IBM Plex Mono", monospace; padding: 7px 0; border-top: 1px solid var(--line); }
+.savings-row .agree { color: var(--ok); } .savings-row .agree.warn { color: var(--money); }
+.savings-row .save { color: var(--money); text-align: right; }
+.savings-note { font: 11px "IBM Plex Mono", monospace; color: var(--dim); margin-top: 8px; }
 </style>
 </head>
 <body>
@@ -277,6 +284,11 @@ main { max-width: 1180px; margin: 0 auto; padding: 20px 22px 48px; }
         <h2 id="ctx-title">Context window</h2>
         <div id="ctx" class="empty">Select an agent in the graph.</div>
       </section>
+      <div class="panel" id="savings-panel">
+        <h2>Savings report</h2>
+        <button id="savings-run" class="btn">Analyze savings</button>
+        <div id="savings-out"></div>
+      </div>
     </div>
   </div>
 </main>

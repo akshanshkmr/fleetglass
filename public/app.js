@@ -392,6 +392,33 @@ function forkPanel(traceId, idx, step) {
 
 const esc = (s) => (s || '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 
+// savings report: sample recent calls, fork on cheaper models, judge agreement.
+$('savings-run').addEventListener('click', async () => {
+  const wf = selectedWf;
+  const out = $('savings-out');
+  out.innerHTML = '<div class="savings-note">Sampling real calls and forking on cheaper models…</div>';
+  let job;
+  try {
+    const { id } = await (await fetch('/api/savings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow: wf }) })).json();
+    for (let i = 0; i < 60; i++) {                    // poll up to ~60s
+      await new Promise((r) => setTimeout(r, 1000));
+      job = await (await fetch('/api/savings?id=' + id)).json();
+      if (job.status !== 'running') break;
+    }
+  } catch (e) { out.innerHTML = `<div class="savings-note">${e.message}</div>`; return; }
+  if (!job || job.status === 'error') { out.innerHTML = `<div class="savings-note">${job?.error || 'analysis failed'}</div>`; return; }
+  const pass = (job.findings || []).filter((f) => f.pass && f.savingsPerMo > 0);
+  const yr = pass.reduce((s, f) => s + f.savingsPerMo, 0) * 12;
+  out.innerHTML = `<div class="savings-head">Recoverable ≈ ${money(yr)}/yr · agent ${job.agent}</div>` +
+    (job.findings || []).map((f) => {
+      const pct = Math.round(f.agreement * 100);
+      return `<div class="savings-row"><span>${f.from.replace(/^(claude|gemini)-/, '')} → ${f.to.replace(/^(claude|gemini)-/, '')}${f.fidelity === 'cross-provider' ? ' ~' : ''}</span>` +
+        `<span class="agree ${f.pass ? '' : 'warn'}">${pct}%</span>` +
+        `<span class="save">${money(f.savingsPerMo)}/mo</span></div>`;
+    }).join('') +
+    `<div class="savings-note">~ = cross-provider (tools dropped). Agreement measured on ${(job.findings?.[0]?.samples) || 0} sampled calls. Advisory — nothing changed in your system.</div>`;
+});
+
 $('replay-close').addEventListener('click', closeReplay);
 $('replay').addEventListener('click', (e) => { if (e.target === $('replay')) closeReplay(); });
 $('replay-scrub').addEventListener('input', (e) => { if (replay) { replay.idx = Number(e.target.value); renderReplay(); } });
