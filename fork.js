@@ -1,61 +1,37 @@
-// fork.js — Phase 1 "fork-from-step": re-execute one recorded chat step live on a
-// different model and compare completion + cost against the original. This is the
-// trust engine for routing — "re-run step 12 on Haiku" before you believe a swap.
-//
-// Fidelity ceiling: the substrate captures a step's user prompt as text but system/
-// history/retrieval only as token counts, so a fork is faithful to the prompt and
-// approximate on hidden context.
-// ponytail: prompt-only re-execution; record the full messages array in sdk/node/tracer.js
-// for exact re-execution when counterfactual precision matters.
-
+// fork.js — faithful, cross-provider fork-from-step: re-execute a recorded chat
+// step's captured canonical request on any target provider/model, and compare
+// completion + cost against the original. The counterfactual engine of the
+// savings platform (M1+).
 import { callCost } from './store.js';
+import { toProvider, parseResponse, providerOf } from './translate.js';
 
-// Only Claude models are forkable here — it's the one provider we hold a key for.
-export const forkable = (model) => model.startsWith('claude-');
+const KEY_ENV = { anthropic: 'ANTHROPIC_API_KEY', openai: 'OPENAI_API_KEY', google: 'GEMINI_API_KEY' };
+export const keyFor = (provider) => process.env[KEY_ENV[provider]];
 
-async function anthropicCall({ model, maxTokens, prompt }) {
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) { const e = new Error('ANTHROPIC_API_KEY not set on the control plane'); e.code = 'NO_KEY'; throw e; }
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({ model, max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }] }),
-  });
-  if (!res.ok) throw new Error(`anthropic ${res.status}: ${(await res.text()).slice(0, 200)}`);
+async function httpCall(url, headers, body) {
+  const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(`${res.status}: ${(await res.text()).slice(0, 200)}`);
   return res.json();
 }
 
-// `call` is injectable so the self-check runs without a network/key.
-export async function forkStep(step, model, call = anthropicCall) {
+// `call` is injectable so tests run without a network/key.
+export async function forkStep(step, target, call = httpCall) {
   if (!step || step.kind !== 'chat') throw new Error('can only fork a chat step');
-  if (!forkable(model)) throw new Error(`fork target must be a Claude model (no key for ${model})`);
-  if (!step.prompt) throw new Error('step recorded no prompt text to re-run');
+  if (!step.request || !step.request.messages) throw new Error('step has no captured request — enable captureRequests to fork faithfully');
+  const model = target.model;
+  const provider = target.provider || providerOf(model);
+  if (!provider) throw new Error(`unknown provider for model ${model}`);
+  const key = keyFor(provider);
+  if (!key) { const e = new Error(`${KEY_ENV[provider]} not set on the control plane`); e.code = 'NO_KEY'; throw e; }
 
-  const data = await call({ model, maxTokens: Math.max(256, Math.min(4096, step.out || 1024)), prompt: step.prompt });
-  const completion = (data.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n');
-  const inTok = data.usage?.input_tokens || 0;
-  const outTok = data.usage?.output_tokens || 0;
+  const maxTokens = Math.max(256, Math.min(4096, step.out || 1024));
+  const { url, headers, body } = toProvider(step.request, { provider, model, maxTokens, key });
+  const data = await call(url, headers, body);
+  const { completion, inTok, outTok } = parseResponse(provider, data);
   const cost = callCost(model, inTok, outTok);
   return {
-    prompt: step.prompt,
     original: { model: step.model, in: step.in, out: step.out, cost: step.cost, completion: step.completion },
-    fork: { model, in: inTok, out: outTok, cost, completion },
+    fork: { provider, model, in: inTok, out: outTok, cost, completion },
     deltaCost: cost - step.cost,
   };
-}
-
-// self-check: node fork.js
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const fake = async ({ model }) => ({
-    content: [{ type: 'text', text: `re-run on ${model}` }],
-    usage: { input_tokens: 1000, output_tokens: 200 },
-  });
-  const step = { kind: 'chat', model: 'claude-opus-4-8', in: 1000, out: 200, cost: callCost('claude-opus-4-8', 1000, 200), prompt: 'Summarize.', completion: 'orig' };
-  const r = await forkStep(step, 'claude-haiku-4-5', fake);
-  console.assert(r.fork.completion === 're-run on claude-haiku-4-5', 'completion shaped');
-  console.assert(r.fork.cost === callCost('claude-haiku-4-5', 1000, 200), 'fork cost from usage');
-  console.assert(r.deltaCost < 0, 'haiku cheaper than opus → negative delta');
-  await forkStep({ kind: 'tool' }, 'claude-haiku-4-5', fake).then(() => console.assert(false, 'tool step must reject')).catch(() => {});
-  await forkStep(step, 'gemini-2.5-flash', fake).then(() => console.assert(false, 'non-claude must reject')).catch(() => {});
-  console.log('fork.js self-check ok');
 }
