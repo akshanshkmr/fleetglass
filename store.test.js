@@ -13,7 +13,7 @@ function batch(spans, wf) {
   };
 }
 
-function chatSpan({ ts, trace = 't1', spanId, parent, agent, model = 'claude-sonnet-5', inTok = 1000, outTok = 100 }) {
+function chatSpan({ ts, trace = 't1', spanId, parent, agent, model = 'claude-sonnet-5', inTok = 1000, outTok = 100, extra = [] }) {
   return {
     traceId: trace,
     spanId,
@@ -25,6 +25,7 @@ function chatSpan({ ts, trace = 't1', spanId, parent, agent, model = 'claude-son
       { key: 'gen_ai.request.model', value: { stringValue: model } },
       { key: 'gen_ai.usage.input_tokens', value: { intValue: inTok } },
       { key: 'gen_ai.usage.output_tokens', value: { intValue: outTok } },
+      ...extra,
     ],
   };
 }
@@ -107,6 +108,20 @@ test('traces record replayable steps in order, including tool I/O', () => {
   assert.equal(t.steps[2].tool, 'web.search');
   assert.equal(t.steps[2].output, '{"results":3}');
   assert.equal(t.start, NOW - 5000);
+});
+
+test('ingest parses fleetglass.request onto the chat step', () => {
+  const store = createStore();
+  const req = { system: 's', messages: [{ role: 'user', content: 'q' }], tools: null };
+  store.ingest(batch([
+    chatSpan({
+      ts: NOW - 5000, spanId: 'a', agent: 'a', model: 'claude-opus-4-8', inTok: 10, outTok: 2,
+      extra: [{ key: 'fleetglass.request', value: { stringValue: JSON.stringify(req) } }],
+    }),
+  ], 'wf'));
+  const t = store.listTraces()[0];
+  const full = store.getTrace(t.id);
+  assert.deepEqual(full.steps[0].request, req);
 });
 
 test('anomaly fires when recent cost/call doubles vs baseline', () => {

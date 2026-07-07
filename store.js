@@ -112,10 +112,14 @@ export function createStore() {
             tools: attr(s, 'fleetglass.context.tools_tokens') || 0,
           };
           calls.push({ ts, trace: s.traceId, wf, agent, model, in: inTok, out: outTok, cost, ctx });
+          const reqRaw = attr(s, 'fleetglass.request');
+          let request;
+          if (reqRaw) { try { request = JSON.parse(reqRaw); } catch { request = undefined; } }
           addStep(s.traceId, wf, {
             ts, agent, kind: 'chat', model, in: inTok, out: outTok, cost, ctx,
             prompt: attr(s, 'gen_ai.prompt') || '',
             completion: attr(s, 'gen_ai.completion') || '',
+            request,
           });
           const cum = bucket(wf);
           cum.spend += cost;
