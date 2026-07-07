@@ -434,6 +434,7 @@ $('savings-run').addEventListener('click', async () => {
     }
   } catch (e) { out.innerHTML = `<div class="savings-note">${e.message}</div>`; return; }
   if (!job || job.status === 'error') { out.innerHTML = `<div class="savings-note">${job?.error || 'analysis failed'}</div>`; return; }
+  if (!(job.findings || []).length) { out.innerHTML = `<div class="savings-note">No captured requests for <b>${job.agent || 'this agent'}</b> — enable <code>captureRequests</code> in the tracer (and set provider keys) so its calls can be sampled and forked.</div>`; return; }
   const pass = (job.findings || []).filter((f) => f.pass && f.savingsPerMo > 0);
   const yr = pass.reduce((s, f) => s + f.savingsPerMo, 0) * 12;
   out.innerHTML = `<div class="savings-head">Recoverable ≈ ${money(yr)}/yr · agent ${job.agent}</div>` +
@@ -461,6 +462,7 @@ $('context-run').addEventListener('click', async () => {
     }
   } catch (e) { out.innerHTML = `<div class="savings-note">${e.message}</div>`; return; }
   if (!job || job.status === 'error') { out.innerHTML = `<div class="savings-note">${job?.error || 'analysis failed'}</div>`; return; }
+  if (!(job.findings || []).length) { out.innerHTML = `<div class="savings-note">No captured requests for <b>${job.agent || 'this agent'}</b> — enable <code>captureRequests</code> in the tracer (and set provider keys) so its context can be ablated.</div>`; return; }
   const pass = (job.findings || []).filter((f) => f.pass && f.savingsPerMo > 0);
   const yr = pass.reduce((s, f) => s + f.savingsPerMo, 0) * 12;
   out.innerHTML = `<div class="context-head">Trimmable ≈ ${money(yr)}/yr · agent ${job.agent}</div>` +
