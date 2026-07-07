@@ -18,7 +18,7 @@ export function toProvider(canonical, { provider, model, maxTokens, key }) {
   }
   if (provider === 'openai') {
     const msgs = system ? [{ role: 'system', content: system }, ...messages] : [...messages];
-    const body = { model, max_tokens: maxTokens, messages: msgs };
+    const body = { model, max_completion_tokens: maxTokens, messages: msgs };
     if (tools) body.tools = tools;
     return { url: 'https://api.openai.com/v1/chat/completions', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' }, body };
   }

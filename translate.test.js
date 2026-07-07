@@ -24,6 +24,7 @@ test('toProvider(openai) folds system into a message', () => {
   assert.equal(body.messages[0].role, 'system');
   assert.equal(body.messages[0].content, 'be brief');
   assert.equal(body.messages[1].content, 'hi');
+  assert.equal(body.max_completion_tokens, 256);
 });
 
 test('toProvider(google) shapes contents + systemInstruction', () => {
