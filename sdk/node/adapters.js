@@ -12,6 +12,28 @@ function contentsToText(contents) {
   return contents.map((c) => typeof c === 'string' ? c : (c.parts || []).map((p) => p.text || '').join('')).join('\n');
 }
 
+// Provider request → canonical { system, messages:[{role,content}], tools }.
+function googleMessages(contents) {
+  if (typeof contents === 'string') return [{ role: 'user', content: contents }];
+  if (!Array.isArray(contents)) return [];
+  return contents.map((c) => ({
+    role: c.role === 'model' ? 'assistant' : 'user',
+    content: typeof c === 'string' ? c : (c.parts || []).map((p) => p.text || '').join(''),
+  }));
+}
+function anthropicMessages(messages) {
+  return (messages || []).map((m) => ({
+    role: m.role === 'assistant' ? 'assistant' : 'user',
+    content: typeof m.content === 'string' ? m.content : (m.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n'),
+  }));
+}
+function openaiMessages(messages) {
+  return (messages || []).filter((m) => m.role !== 'system').map((m) => ({
+    role: m.role === 'assistant' ? 'assistant' : 'user',
+    content: typeof m.content === 'string' ? m.content : '',
+  }));
+}
+
 function wrapGoogle(client, fg) {
   const models = client.models;
   const orig = models.generateContent.bind(models);
@@ -33,6 +55,7 @@ function wrapGoogle(client, fg) {
             history: historyText,
             tools: req.config?.tools ? JSON.stringify(req.config.tools) : '',
           },
+          request: { system: sysText(req.config?.systemInstruction), messages: googleMessages(req.contents), tools: req.config?.tools },
         });
         return res;
       };
@@ -70,6 +93,7 @@ function wrapAnthropic(client, fg) {
         prompt: msgsText(params.messages),
         completion: (res.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n'),
         context: { system: params.system || '', history: msgsText(params.messages), tools: params.tools ? JSON.stringify(params.tools) : '' },
+        request: { system: params.system || '', messages: anthropicMessages(params.messages), tools: params.tools },
       });
       return res;
     };
@@ -91,6 +115,7 @@ function wrapOpenAI(client, fg) {
         prompt: msgsText(params.messages),
         completion: res.choices?.[0]?.message?.content || '',
         context: { system: sysFromMessages(params.messages), history: msgsText(params.messages), tools: params.tools ? JSON.stringify(params.tools) : '' },
+        request: { system: sysFromMessages(params.messages), messages: openaiMessages(params.messages), tools: params.tools },
       });
       return res;
     };

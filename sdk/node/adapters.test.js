@@ -87,3 +87,30 @@ test('wrap(openai) emits a chat span', async () => {
   assert.equal(attr(sent[0], 'gen_ai.request.model'), 'gpt-4o-mini');
   assert.equal(attr(sent[0], 'gen_ai.usage.input_tokens', 'intValue'), 8);
 });
+
+test('wrap(google) captures a canonical request when enabled', async () => {
+  const sent = [];
+  const fg = createTracer({ post: async (s) => sent.push(...s), captureRequests: true });
+  const client = wrap({ models: { async generateContent() { return { text: 'hi', usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 2 } }; } } }, fg);
+  await fg.task(() => fg.agent('a', () => client.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: [{ role: 'user', parts: [{ text: 'question one' }] }],
+    config: { systemInstruction: 'be brief', tools: [{ name: 't' }] },
+  })));
+  await fg.flush();
+  const raw = sent[0].attributes.find((a) => a.key === 'fleetglass.request')?.value?.stringValue;
+  assert.ok(raw, 'request captured');
+  const req = JSON.parse(raw);
+  assert.equal(req.system, 'be brief');
+  assert.deepEqual(req.messages, [{ role: 'user', content: 'question one' }]);
+  assert.deepEqual(req.tools, [{ name: 't' }]);
+});
+
+test('request is NOT captured when captureRequests is off (default)', async () => {
+  const sent = [];
+  const fg = createTracer({ post: async (s) => sent.push(...s) });
+  const client = wrap({ models: { async generateContent() { return { text: 'hi' }; } } }, fg);
+  await fg.task(() => fg.agent('a', () => client.models.generateContent({ model: 'm', contents: 'x' })));
+  await fg.flush();
+  assert.equal(sent[0].attributes.find((a) => a.key === 'fleetglass.request'), undefined);
+});

@@ -16,7 +16,7 @@ function contextTokens(segments, inputTokens) {
   return Object.fromEntries(Object.entries(chars).map(([k, n]) => [k, Math.round((n / total) * inputTokens)]));
 }
 
-export function createTracer({ endpoint = process.env.FLEETGLASS_URL || 'http://localhost:4700/v1/traces', workflow = 'default', post } = {}) {
+export function createTracer({ endpoint = process.env.FLEETGLASS_URL || 'http://localhost:4700/v1/traces', workflow = 'default', post, captureRequests = false, redact = (r) => r, maxRequestBytes = 16000 } = {}) {
   let queue = [];
   let timer = null;
 
@@ -54,7 +54,7 @@ export function createTracer({ endpoint = process.env.FLEETGLASS_URL || 'http://
   }
   function nextParent(f) { return f.last || f.anchor || undefined; }
 
-  function emitChat({ model, inputTokens = 0, outputTokens = 0, prompt = '', completion = '', context } = {}) {
+  function emitChat({ model, inputTokens = 0, outputTokens = 0, prompt = '', completion = '', context, request } = {}) {
     const f = frameOrThrow();
     const spanId = hex(8);
     const attrs = [
@@ -67,6 +67,12 @@ export function createTracer({ endpoint = process.env.FLEETGLASS_URL || 'http://
     if (prompt) attrs.push({ key: 'gen_ai.prompt', value: { stringValue: String(prompt).slice(0, 4000) } });
     if (completion) attrs.push({ key: 'gen_ai.completion', value: { stringValue: String(completion).slice(0, 4000) } });
     if (context) for (const [k, v] of Object.entries(contextTokens(context, inputTokens))) attrs.push({ key: `fleetglass.context.${k}_tokens`, value: { intValue: v } });
+    if (captureRequests && request) {
+      try {
+        const blob = JSON.stringify(redact(request)).slice(0, maxRequestBytes);
+        attrs.push({ key: 'fleetglass.request', value: { stringValue: blob } });
+      } catch { /* capture must never break the call */ }
+    }
     const parent = nextParent(f);
     push({ traceId: f.trace, spanId, ...(parent ? { parentSpanId: parent } : {}), name: `chat ${model}`, startTimeUnixNano: String(Date.now() * 1e6), attributes: attrs });
     f.last = spanId;
