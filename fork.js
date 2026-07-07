@@ -8,7 +8,7 @@ import { toProvider, parseResponse, providerOf } from './translate.js';
 const KEY_ENV = { anthropic: 'ANTHROPIC_API_KEY', openai: 'OPENAI_API_KEY', google: 'GEMINI_API_KEY' };
 export const keyFor = (provider) => process.env[KEY_ENV[provider]];
 
-async function httpCall(url, headers, body) {
+export async function httpCall(url, headers, body) {
   const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
   if (!res.ok) throw new Error(`${res.status}: ${(await res.text()).slice(0, 200)}`);
   return res.json();
