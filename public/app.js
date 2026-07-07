@@ -355,7 +355,7 @@ function renderReplay() {
 }
 
 // fork-from-step: re-run this chat step's prompt live on another model, diff the result.
-const FORK_MODELS = ['claude-haiku-4-5', 'claude-sonnet-5', 'claude-opus-4-8'];
+const FORK_MODELS = ['claude-haiku-4-5', 'claude-sonnet-5', 'gpt-4o-mini', 'gemini-2.5-flash'];
 
 function forkPanel(traceId, idx, step) {
   const wrap = document.createElement('div');
@@ -371,7 +371,8 @@ function forkPanel(traceId, idx, step) {
     out.innerHTML = `<div class="forknote">Re-running on ${model}…</div>`;
     let r;
     try {
-      const res = await fetch('/api/fork', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: traceId, step: idx, model }) });
+      const provider = model.startsWith('claude-') ? 'anthropic' : model.startsWith('gpt-') || model.startsWith('o4') ? 'openai' : 'google';
+      const res = await fetch('/api/fork', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: traceId, step: idx, model, provider }) });
       r = await res.json();
       if (!res.ok) throw new Error(r.error || 'fork failed');
     } catch (e) {

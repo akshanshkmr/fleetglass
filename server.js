@@ -36,9 +36,9 @@ const server = http.createServer(async (req, res) => {
     req.on('data', (c) => { body += c; if (body.length > 1e6) req.destroy(); });
     req.on('end', async () => {
       try {
-        const { id, step, model } = JSON.parse(body);
+        const { id, step, model, provider } = JSON.parse(body);
         const t = store.getTrace(id);
-        const result = await forkStep(t && t.steps[step], model);
+        const result = await forkStep(t && t.steps[step], { provider, model });
         res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(result));
       } catch (e) {
         res.writeHead(e.code === 'NO_KEY' ? 501 : 400, { 'content-type': 'application/json' }).end(JSON.stringify({ error: e.message }));
