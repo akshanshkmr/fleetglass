@@ -116,12 +116,15 @@ function renderGraph(wf) {
     ep.rpm = e ? e.rpm : 0;
     const label = svg.querySelector(`text[data-edge="${ep.edge}"]`);
     if (label) label.textContent = ep.rpm + '/min';
+    const edgeObj = wf.edges.find((x) => x.from + '>' + x.to === ep.edge);
+    ep.el.classList.toggle('patho', !!(edgeObj && edgeObj.pathology));
   }
   for (const g of svg.querySelectorAll('.gnode')) {
     const a = wf.agents.find((x) => x.name === g.dataset.agent);
     if (!a) continue;
     g.classList.toggle('sel', a.name === selectedAgent);
     g.classList.toggle('hot', a.alert);
+    g.classList.toggle('patho', !!a.pathology);
     const meta = g.querySelector('.meta');
     meta.textContent = '';
     const model = document.createTextNode(a.model.replace(/^(claude|gemini)-/, '') + ' · ');
@@ -224,6 +227,30 @@ function renderAlerts() {
   }
 }
 
+function renderPathologies(wf) {
+  const panel = $('pathology-panel');
+  const box = $('pathologies');
+  const mine = (snap.pathologies || []).filter((p) => p.workflow === wf.name);
+  panel.hidden = !mine.length;
+  box.textContent = '';
+  const label = { cycle: 'loop', retry: 'retry storm', spiral: 'context spiral' };
+  for (const p of mine) {
+    const div = document.createElement('div');
+    div.className = 'patho';
+    div.innerHTML = `<span class="k">${label[p.kind] || p.kind}</span><span class="d">${p.detail}</span><span class="c">${money(p.cost)} burned</span>`;
+    const replay = document.createElement('button');
+    replay.textContent = 'Replay';
+    replay.addEventListener('click', () => openReplay(p.trace, p.step));
+    const kill = document.createElement('button');
+    kill.className = 'kill';
+    kill.textContent = 'Kill';
+    kill.disabled = true;
+    kill.title = 'needs in-path client (Phase C)';
+    div.append(replay, kill);
+    box.appendChild(div);
+  }
+}
+
 function buildCtx(ctx, box, withLegend = true) {
   const total = CTX.reduce((s, [k]) => s + (ctx[k] || 0), 0);
   if (!total) return 0;
@@ -284,10 +311,11 @@ async function renderTasks(wf) {
 
 let replay = null; // {trace, idx}
 
-async function openReplay(id) {
+async function openReplay(id, stepIdx = 0) {
   const res = await fetch('/api/trace?id=' + id);
   if (!res.ok) return;
-  replay = { trace: await res.json(), idx: 0 };
+  const trace = await res.json();
+  replay = { trace, idx: Math.max(0, Math.min(stepIdx, trace.steps.length - 1)) };
   $('replay').hidden = false;
   $('replay-scrub').max = replay.trace.steps.length - 1;
   renderReplay();
@@ -465,6 +493,7 @@ function renderAll() {
   renderGraph(wf);
   renderCosts(wf);
   renderAlerts();
+  renderPathologies(wf);
   renderCtx(wf);
   renderTasks(wf);
 }

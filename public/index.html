@@ -110,6 +110,15 @@ main { max-width: 1180px; margin: 0 auto; padding: 20px 22px 48px; }
 .alert b { color: var(--signal); font-weight: 500; }
 .empty { color: var(--faint); font-size: 12.5px; }
 
+.patho { display: flex; align-items: baseline; gap: 10px; border-left: 2px solid var(--signal); padding: 6px 10px; margin-bottom: 8px; font-size: 12.5px; background: rgba(255,92,71,.06); }
+.patho .k { font: 10px "IBM Plex Mono", monospace; letter-spacing: .1em; text-transform: uppercase; color: var(--signal); }
+.patho .d { flex: 1; }
+.patho .c { font-family: "IBM Plex Mono", monospace; color: var(--money); }
+.patho button { font: 11.5px "IBM Plex Sans", sans-serif; border-radius: 5px; padding: 4px 10px; border: 1px solid var(--line2); background: transparent; color: var(--text); cursor: pointer; }
+.patho button.kill { opacity: .4; cursor: not-allowed; }
+.gnode.patho rect { stroke: var(--signal); stroke-width: 1.5; }
+.gedge.patho { stroke: var(--signal); }
+
 .ctxbar { display: flex; height: 22px; border-radius: 3px; overflow: hidden; margin-bottom: 12px; }
 .ctxbar div { min-width: 2px; }
 .legend { display: grid; gap: 7px; font-size: 12px; }
@@ -279,6 +288,10 @@ main { max-width: 1180px; margin: 0 auto; padding: 20px 22px 48px; }
       </section>
     </div>
     <div>
+      <div class="panel" id="pathology-panel" hidden>
+        <h2>Structural pathology</h2>
+        <div id="pathologies"></div>
+      </div>
       <section class="panel">
         <h2>Anomalies</h2>
         <div id="alerts" class="empty">No anomalies. Baselines steady.</div>
