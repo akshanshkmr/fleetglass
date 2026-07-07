@@ -176,6 +176,56 @@ test('snapshot flags a ping-pong trace as a cycle pathology', () => {
   assert.ok(snap.workflows[0].agents.find((a) => a.name === 'researcher').pathology, 'agent flagged');
 });
 
+test('edge pathology highlight is scoped to cycle findings, not any two pathological agents', () => {
+  const store = createStore();
+  const base = Date.now() - 2000;
+  const spans = [];
+  // Trace 1: 8-step ping-pong A,B,A,B,... on a shared trace → cycle finding for A,B,
+  // and real A<->B graph edges (each span parented to the previous, cross-agent).
+  for (let i = 0; i < 8; i++) {
+    spans.push(chatSpan({
+      ts: base + i * 100,
+      trace: 'cycleTrace',
+      spanId: 'p' + i,
+      parent: i ? 'p' + (i - 1) : undefined,
+      agent: i % 2 ? 'B' : 'A',
+      model: 'claude-opus-4-8',
+      inTok: 100,
+      outTok: 10,
+    }));
+  }
+  // Trace 2: one B span, then 6 consecutive C spans — the first C is parented to
+  // B (creating a real B->C edge), and the C run is long enough to be a retry
+  // storm (a pathology on C, unrelated to the A<->B cycle).
+  spans.push(chatSpan({ ts: base + 1000, trace: 'retryTrace', spanId: 'r0', agent: 'B', model: 'claude-opus-4-8', inTok: 100, outTok: 10 }));
+  for (let i = 0; i < 6; i++) {
+    spans.push(chatSpan({
+      ts: base + 1100 + i * 100,
+      trace: 'retryTrace',
+      spanId: 'r' + (i + 1),
+      parent: i ? 'r' + i : 'r0',
+      agent: 'C',
+      model: 'claude-opus-4-8',
+      inTok: 100,
+      outTok: 10,
+    }));
+  }
+  store.ingest(batch(spans, 'wf'));
+  const snap = store.snapshot();
+
+  assert.ok(snap.pathologies.some((p) => p.kind === 'cycle' && p.agents.sort().join() === 'A,B'), 'A<->B cycle present');
+  assert.ok(snap.pathologies.some((p) => p.kind === 'retry' && p.agents[0] === 'C'), 'C retry storm present');
+
+  const edge = (from, to) => snap.workflows[0].edges.find((e) => e.from === from && e.to === to);
+  // A<->B is a real cycle → its edges are lit
+  assert.equal(edge('A', 'B')?.pathology, true);
+  assert.equal(edge('B', 'A')?.pathology, true);
+  // B->C connects a cycle agent (B) to a retry agent (C) — not a cyclic handoff — must NOT light
+  assert.equal(edge('B', 'C')?.pathology, false);
+  // node highlighting still applies to any pathology, including C's retry storm
+  assert.ok(snap.workflows[0].agents.find((a) => a.name === 'C').pathology, 'C node flagged');
+});
+
 test('agentSteps returns an agent\'s chat steps with captured requests', () => {
   const store = createStore();
   const req = { system: 's', messages: [{ role: 'user', content: 'q' }], tools: null };

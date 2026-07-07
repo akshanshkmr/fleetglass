@@ -116,8 +116,7 @@ function renderGraph(wf) {
     ep.rpm = e ? e.rpm : 0;
     const label = svg.querySelector(`text[data-edge="${ep.edge}"]`);
     if (label) label.textContent = ep.rpm + '/min';
-    const edgeObj = wf.edges.find((x) => x.from + '>' + x.to === ep.edge);
-    ep.el.classList.toggle('patho', !!(edgeObj && edgeObj.pathology));
+    ep.el.classList.toggle('patho', !!(e && e.pathology));
   }
   for (const g of svg.querySelectorAll('.gnode')) {
     const a = wf.agents.find((x) => x.name === g.dataset.agent);

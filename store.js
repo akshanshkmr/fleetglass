@@ -180,13 +180,17 @@ export function createStore() {
     const recentCut = now - RECENT_MS;
 
     const pathologies = [];
-    const pathoAgents = new Map(); // wf -> Set(agent)
+    const pathoAgents = new Map(); // wf -> Set(agent) — node highlight (all findings)
+    const cycleAgents = new Map(); // wf -> Set(agent) — edge highlight (cycle findings only)
     for (const [id, t] of traces) {
       for (const f of detectPathologies(t, now)) {
         pathologies.push({ workflow: t.wf, trace: id, ...f });
-        let set = pathoAgents.get(t.wf);
-        if (!set) { set = new Set(); pathoAgents.set(t.wf, set); }
-        for (const ag of f.agents) set.add(ag);
+        const maps = f.kind === 'cycle' ? [pathoAgents, cycleAgents] : [pathoAgents];
+        for (const map of maps) {
+          let set = map.get(t.wf);
+          if (!set) { set = new Set(); map.set(t.wf, set); }
+          for (const ag of f.agents) set.add(ag);
+        }
       }
     }
 
@@ -247,10 +251,10 @@ export function createStore() {
         const k = l.from + ' ' + l.to;
         edgeCount.set(k, (edgeCount.get(k) || 0) + 1);
       }
-      const pset = pathoAgents.get(wf);
+      const cset = cycleAgents.get(wf);
       const edges = [...edgeCount].map(([k, n]) => {
         const [from, to] = k.split(' ');
-        return { from, to, rpm: n, pathology: !!(pset && pset.has(from) && pset.has(to)) };
+        return { from, to, rpm: n, pathology: !!(cset && cset.has(from) && cset.has(to)) };
       });
 
       workflows.push({
