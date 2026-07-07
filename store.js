@@ -157,6 +157,15 @@ export function createStore() {
     return t ? { id, wf: t.wf, start: t.start, steps: t.steps } : null;
   }
 
+  function agentSteps(workflow, agent) {
+    const out = [];
+    for (const t of traces.values()) {
+      if (t.wf !== workflow) continue;
+      for (const s of t.steps) if (s.kind === 'chat' && s.agent === agent && s.request) out.push(s);
+    }
+    return out.sort((a, b) => a.ts - b.ts);
+  }
+
   function prune(now) {
     const cut = now - WINDOW_MS;
     while (calls.length && calls[0].ts < cut) calls.shift();
@@ -258,5 +267,5 @@ export function createStore() {
     };
   }
 
-  return { ingest, snapshot, listTraces, getTrace };
+  return { ingest, snapshot, listTraces, getTrace, agentSteps };
 }

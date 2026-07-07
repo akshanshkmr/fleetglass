@@ -150,3 +150,15 @@ test('anomaly fires when recent cost/call doubles vs baseline', () => {
   calm.ingest(batch(calmSpans));
   assert.equal(calm.snapshot(NOW).alerts.length, 0);
 });
+
+test('agentSteps returns an agent\'s chat steps with captured requests', () => {
+  const store = createStore();
+  const req = { system: 's', messages: [{ role: 'user', content: 'q' }], tools: null };
+  store.ingest(batch([chatSpan({ ts: NOW - 5000, spanId: 'a', agent: 'writer', model: 'claude-opus-4-8', inTok: 10, outTok: 2, extra: [
+    { key: 'fleetglass.request', value: { stringValue: JSON.stringify(req) } },
+  ] })], 'wf'));
+  const steps = store.agentSteps('wf', 'writer');
+  assert.equal(steps.length, 1);
+  assert.equal(steps[0].agent, 'writer');
+  assert.deepEqual(steps[0].request, req);
+});

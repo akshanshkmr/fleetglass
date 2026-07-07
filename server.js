@@ -3,7 +3,11 @@ import { readFile } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createStore } from './store.js';
-import { forkStep } from './fork.js';
+import { forkStep, keyFor } from './fork.js';
+import { analyze } from './savings.js';
+import { makeJudge } from './judge.js';
+import { score as scoreFn } from './agreement.js';
+import { providerOf } from './translate.js';
 
 const PORT = process.env.PORT || 4700;
 const PUB = join(dirname(fileURLToPath(import.meta.url)), 'public');
@@ -11,6 +15,9 @@ const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css
 
 const store = createStore();
 const sseClients = new Set();
+const savingsJobs = new Map(); // id -> { status, findings, error }
+const DEFAULT_TARGETS = [{ model: 'claude-haiku-4-5' }, { model: 'gpt-4o-mini' }, { model: 'gemini-2.5-flash' }];
+const JUDGE_MODEL = process.env.JUDGE_MODEL || 'gemini-2.5-flash';
 
 setInterval(() => {
   if (!sseClients.size) return;
@@ -44,6 +51,41 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(e.code === 'NO_KEY' ? 501 : 400, { 'content-type': 'application/json' }).end(JSON.stringify({ error: e.message }));
       }
     });
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/savings') {
+    let body = '';
+    req.on('data', (c) => { body += c; if (body.length > 1e6) req.destroy(); });
+    req.on('end', () => {
+      let params; try { params = JSON.parse(body); } catch { res.writeHead(400).end('{}'); return; }
+      const snap = store.snapshot();
+      const wf = snap.workflows.find((w) => w.name === params.workflow);
+      if (!wf) { res.writeHead(404, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'unknown workflow' })); return; }
+      const agentName = params.agent || (wf.agents[0] && wf.agents[0].name); // default: top-spend agent
+      const agentRow = wf.agents.find((a) => a.name === agentName);
+      if (!agentRow) { res.writeHead(404, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'unknown agent' })); return; }
+      const steps = store.agentSteps(params.workflow, agentName);
+      const targets = (params.targets || DEFAULT_TARGETS).filter((t) => !steps[0] || t.model !== steps[0].model);
+      const callsPerMonth = (agentRow.callsPerMin || 0) * 60 * 24 * 30;
+      const judgeKey = keyFor(providerOf(JUDGE_MODEL));
+      const judge = judgeKey ? makeJudge({ model: JUDGE_MODEL, key: judgeKey }) : null;
+      const score = (a, b) => scoreFn(a, b, judge ? { judge } : {});
+
+      const id = Math.random().toString(16).slice(2, 10);
+      savingsJobs.set(id, { status: 'running' });
+      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ id }));
+      analyze({ steps, agent: agentName, targets, callsPerMonth, fork: forkStep, score })
+        .then((findings) => savingsJobs.set(id, { status: 'done', agent: agentName, findings }))
+        .catch((e) => savingsJobs.set(id, { status: 'error', error: e.message }));
+    });
+    return;
+  }
+
+  if (url.pathname === '/api/savings') { // GET poll
+    const job = savingsJobs.get(url.searchParams.get('id'));
+    if (!job) { res.writeHead(404).end('{}'); return; }
+    res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(job));
     return;
   }
 
