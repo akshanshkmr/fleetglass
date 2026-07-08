@@ -251,6 +251,13 @@ main { max-width: 1180px; margin: 0 auto; padding: 20px 22px 48px; }
 
 #context-panel .btn { background: var(--violet); color: #120a24; border: 0; border-radius: 6px; padding: 7px 13px; font: 500 12.5px "IBM Plex Sans", sans-serif; cursor: pointer; }
 .context-head { font: 13px "IBM Plex Mono", monospace; color: var(--violet); margin: 10px 0; }
+
+#regression-panel textarea { width: 100%; box-sizing: border-box; background: var(--ink); color: var(--text); border: 1px solid var(--line2); border-radius: 6px; padding: 8px 10px; font: 12px "IBM Plex Mono", monospace; resize: vertical; margin-bottom: 8px; }
+#regression-panel .btn { background: var(--wire); color: #08132b; border: 0; border-radius: 6px; padding: 7px 13px; font: 500 12.5px "IBM Plex Sans", sans-serif; cursor: pointer; }
+.regr-head { font: 13px "IBM Plex Mono", monospace; color: var(--wire); margin: 10px 0; }
+.regr-row { font: 11.5px "IBM Plex Mono", monospace; color: var(--dim); padding: 7px 0; border-top: 1px solid var(--line); }
+.regr-row .agree { color: var(--ok); } .regr-row .agree.warn { color: var(--money); }
+.regr-row .snip { color: var(--faint); display: block; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 </style>
 </head>
 <body>
@@ -309,6 +316,12 @@ main { max-width: 1180px; margin: 0 auto; padding: 20px 22px 48px; }
         <h2>Context ROI</h2>
         <button id="context-run" class="btn">Analyze context</button>
         <div id="context-out"></div>
+      </div>
+      <div class="panel" id="regression-panel">
+        <h2>Prompt regression</h2>
+        <textarea id="regression-input" placeholder="Paste a proposed new system prompt…" rows="3"></textarea>
+        <button id="regression-run" class="btn">Run regression</button>
+        <div id="regression-out"></div>
       </div>
     </div>
   </div>

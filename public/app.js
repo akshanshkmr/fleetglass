@@ -475,6 +475,36 @@ $('context-run').addEventListener('click', async () => {
     `<div class="savings-note">A below-bar segment changes output if removed — keep it. Advisory only.</div>`;
 });
 
+// prompt regression: fork a system-swapped step on the same model, score baseline vs new.
+$('regression-run').addEventListener('click', async () => {
+  const wf = selectedWf;
+  const newSystem = $('regression-input').value;
+  const out = $('regression-out');
+  if (!newSystem.trim()) { out.innerHTML = '<div class="savings-note">Paste a proposed system prompt first.</div>'; return; }
+  out.innerHTML = '<div class="savings-note">Re-running the golden set with the new prompt…</div>';
+  let job;
+  try {
+    const { id } = await (await fetch('/api/regression', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workflow: wf, newSystem }) })).json();
+    for (let i = 0; i < 60; i++) {
+      await new Promise((r) => setTimeout(r, 1000));
+      job = await (await fetch('/api/regression?id=' + id)).json();
+      if (job.status !== 'running') break;
+    }
+  } catch (e) { out.innerHTML = `<div class="savings-note">${e.message}</div>`; return; }
+  if (!job || job.status === 'error') { out.innerHTML = `<div class="savings-note">${job?.error || 'regression failed'}</div>`; return; }
+  const r = job.result || {};
+  if (!r.samples) { out.innerHTML = `<div class="savings-note">No captured requests for <b>${r.agent || 'this agent'}</b> — enable <code>captureRequests</code> in the tracer (and set provider keys) so its calls can be re-run.</div>`; return; }
+  const pct = (x) => (x >= 0 ? '+' : '') + Math.round(x * 100) + '%';
+  out.innerHTML = `<div class="regr-head">${r.changed} of ${r.samples} outputs changed · cost ${pct(r.costDeltaPct)} · length ${pct(r.lengthDeltaPct)} · agent ${r.agent}</div>` +
+    (r.rows || []).map((row) => {
+      const p = Math.round(row.agreement * 100);
+      return `<div class="regr-row"><span class="agree ${row.agreement < 0.95 ? 'warn' : ''}">${p}% match</span>` +
+        `<span class="snip">old: ${(row.baseline || '').replace(/</g, '&lt;')}</span>` +
+        `<span class="snip">new: ${(row.updated || '').replace(/</g, '&lt;')}</span></div>`;
+    }).join('') +
+    `<div class="savings-note">Advisory — a low % means the new prompt changed that output; review before shipping. Nothing shipped.</div>`;
+});
+
 $('replay-close').addEventListener('click', closeReplay);
 $('replay').addEventListener('click', (e) => { if (e.target === $('replay')) closeReplay(); });
 $('replay-scrub').addEventListener('input', (e) => { if (replay) { replay.idx = Number(e.target.value); renderReplay(); } });
