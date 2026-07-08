@@ -499,8 +499,8 @@ $('regression-run').addEventListener('click', async () => {
     (r.rows || []).map((row) => {
       const p = Math.round(row.agreement * 100);
       return `<div class="regr-row"><span class="agree ${row.agreement < 0.95 ? 'warn' : ''}">${p}% match</span>` +
-        `<span class="snip">old: ${(row.baseline || '').replace(/</g, '&lt;')}</span>` +
-        `<span class="snip">new: ${(row.updated || '').replace(/</g, '&lt;')}</span></div>`;
+        `<span class="snip">old: ${esc(row.baseline || '')}</span>` +
+        `<span class="snip">new: ${esc(row.updated || '')}</span></div>`;
     }).join('') +
     `<div class="savings-note">Advisory — a low % means the new prompt changed that output; review before shipping. Nothing shipped.</div>`;
 });
