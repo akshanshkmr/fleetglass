@@ -63,6 +63,7 @@ const server = http.createServer(async (req, res) => {
     req.on('data', (c) => { body += c; if (body.length > 1e6) req.destroy(); });
     req.on('end', () => {
       let params; try { params = JSON.parse(body); } catch { res.writeHead(400).end('{}'); return; }
+      if (!params || typeof params !== 'object') { res.writeHead(400, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'invalid body' })); return; }
       const snap = store.snapshot();
       const wf = snap.workflows.find((w) => w.name === params.workflow);
       if (!wf) { res.writeHead(404, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'unknown workflow' })); return; }
@@ -98,6 +99,7 @@ const server = http.createServer(async (req, res) => {
     req.on('data', (c) => { body += c; if (body.length > 1e6) req.destroy(); });
     req.on('end', () => {
       let params; try { params = JSON.parse(body); } catch { res.writeHead(400).end('{}'); return; }
+      if (!params || typeof params !== 'object') { res.writeHead(400, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'invalid body' })); return; }
       const snap = store.snapshot();
       const wf = snap.workflows.find((w) => w.name === params.workflow);
       if (!wf) { res.writeHead(404, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'unknown workflow' })); return; }
@@ -132,6 +134,7 @@ const server = http.createServer(async (req, res) => {
     req.on('data', (c) => { body += c; if (body.length > 1e6) req.destroy(); });
     req.on('end', () => {
       let params; try { params = JSON.parse(body); } catch { res.writeHead(400).end('{}'); return; }
+      if (!params || typeof params !== 'object') { res.writeHead(400, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'invalid body' })); return; }
       if (!params.newSystem || !String(params.newSystem).trim()) { res.writeHead(400, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'newSystem prompt required' })); return; }
       const snap = store.snapshot();
       const wf = snap.workflows.find((w) => w.name === params.workflow);
