@@ -3,10 +3,9 @@
 // completion + cost against the original. The counterfactual engine of the
 // savings platform (M1+).
 import { callCost } from './store.js';
-import { toProvider, parseResponse, providerOf } from './translate.js';
+import { toProvider, parseResponse, providerOf, keyFor, KEY_ENV } from './translate.js';
 
-const KEY_ENV = { anthropic: 'ANTHROPIC_API_KEY', openai: 'OPENAI_API_KEY', google: 'GEMINI_API_KEY' };
-export const keyFor = (provider) => process.env[KEY_ENV[provider]];
+export { keyFor };  // server.js imports keyFor from here
 
 export async function httpCall(url, headers, body) {
   const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });

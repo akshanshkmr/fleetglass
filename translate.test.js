@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { toProvider, parseResponse, providerOf } from './translate.js';
+import { toProvider, parseResponse, providerOf, keyFor } from './translate.js';
 
 const canonical = { system: 'be brief', messages: [{ role: 'user', content: 'hi' }], tools: null };
 
@@ -37,4 +37,9 @@ test('parseResponse extracts completion + usage per provider', () => {
   assert.deepEqual(parseResponse('anthropic', { content: [{ type: 'text', text: 'a' }], usage: { input_tokens: 3, output_tokens: 1 } }), { completion: 'a', inTok: 3, outTok: 1 });
   assert.deepEqual(parseResponse('openai', { choices: [{ message: { content: 'b' } }], usage: { prompt_tokens: 4, completion_tokens: 2 } }), { completion: 'b', inTok: 4, outTok: 2 });
   assert.deepEqual(parseResponse('google', { candidates: [{ content: { parts: [{ text: 'c' }] } }], usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 3 } }), { completion: 'c', inTok: 5, outTok: 3 });
+});
+
+test('keyFor reads the provider env var', () => {
+  process.env.ANTHROPIC_API_KEY = 'sk-test';
+  assert.equal(keyFor('anthropic'), 'sk-test');
 });
