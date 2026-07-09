@@ -59,3 +59,55 @@ test('a call error propagates (not swallowed)', async () => {
   const fg = fleetglass({ model: 'claude-sonnet-5', key: 'k', call: async () => { throw new Error('502 upstream'); } });
   await assert.rejects(fg.chat('x'), /502 upstream/);
 });
+
+// A test transport captures spans instead of POSTing them.
+function tracing(model, extra = {}) {
+  const sent = [];
+  const fg = fleetglass({
+    model, key: 'k',
+    call: async () => ({ content: [{ type: 'text', text: 'ok' }], usage: { input_tokens: 7, output_tokens: 2 } }),
+    post: async (spans) => sent.push(...spans),
+    ...extra,
+  });
+  return { fg, sent };
+}
+const attr = (s, k) => s.attributes.find((a) => a.key === k)?.value;
+
+test('a bare chat auto-wraps and emits one chat span', async () => {
+  const { fg, sent } = tracing('claude-sonnet-5');
+  await fg.chat('hi');
+  await fg.flush();
+  assert.equal(sent.length, 1);
+  assert.equal(attr(sent[0], 'gen_ai.operation.name').stringValue, 'chat');
+  assert.equal(attr(sent[0], 'gen_ai.usage.input_tokens').intValue, 7);
+});
+
+test('captureRequests off → no fleetglass.request attr; on → present', async () => {
+  const off = tracing('claude-sonnet-5');
+  await off.fg.chat({ messages: [{ role: 'user', content: 'hi' }] });
+  await off.fg.flush();
+  assert.equal(attr(off.sent[0], 'fleetglass.request'), undefined);
+
+  const on = tracing('claude-sonnet-5', { captureRequests: true });
+  await on.fg.chat({ system: 's', messages: [{ role: 'user', content: 'hi' }] });
+  await on.fg.flush();
+  const blob = attr(on.sent[0], 'fleetglass.request').stringValue;
+  assert.match(blob, /"system":"s"/);
+});
+
+test('explicit fg.agent names the span (topology preserved)', async () => {
+  const { fg, sent } = tracing('claude-sonnet-5');
+  await fg.task(async () => { await fg.agent('planner', async () => { await fg.chat('hi'); }); });
+  await fg.flush();
+  assert.equal(attr(sent[0], 'gen_ai.agent.name').stringValue, 'planner');
+});
+
+test('emit failure never breaks a successful call', async () => {
+  const fg = fleetglass({
+    model: 'claude-sonnet-5', key: 'k',
+    call: async () => ({ content: [{ type: 'text', text: 'ok' }], usage: { input_tokens: 1, output_tokens: 1 } }),
+    post: async () => { throw new Error('collector down'); },
+  });
+  const r = await fg.chat('hi');   // must resolve despite the transport throwing
+  assert.equal(r.text, 'ok');
+});
