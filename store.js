@@ -5,6 +5,7 @@
 // ponytail: in-memory + 10min window; swap for ClickHouse when retention matters.
 
 import { detectPathologies } from './pathology.js';
+import { agentYield } from './yield.js';
 
 export const PRICES = {
   // $ per Mtok [input, output] — list prices as of mid-2026, adjust as needed
@@ -25,6 +26,11 @@ export const PRICES = {
   'o4-mini': [1.1, 4.4],
 };
 const DEFAULT_PRICE = [3, 15];
+
+function inputPriceOf(model) {
+  const key = Object.keys(PRICES).find((k) => model.startsWith(k));
+  return (key ? PRICES[key] : DEFAULT_PRICE)[0];
+}
 
 export function callCost(model, inTok, outTok) {
   // prefix match so dated snapshots (claude-haiku-4-5-20251001) still resolve
@@ -168,6 +174,15 @@ export function createStore() {
     return out.sort((a, b) => a.ts - b.ts);
   }
 
+  function agentChatSteps(workflow, agent) {
+    const out = [];
+    for (const t of traces.values()) {
+      if (t.wf !== workflow) continue;
+      for (const s of t.steps) if (s.kind === 'chat' && s.agent === agent) out.push(s);
+    }
+    return out.sort((a, b) => a.ts - b.ts);
+  }
+
   function prune(now) {
     const cut = now - WINDOW_MS;
     while (calls.length && calls[0].ts < cut) calls.shift();
@@ -241,9 +256,15 @@ export function createStore() {
           live: now - a.lastSeen < 10 * 1000,
           alert: firing,
           pathology: pathoAgents.get(wf)?.has(name) || false,
+          yield: agentYield(agentChatSteps(wf, name), inputPriceOf(ca.model)),
         });
       }
       agents.sort((x, y) => y.spend - x.spend);
+
+      const yieldTotal = agents.reduce((acc, a) => ({
+        cacheSavingsPerMo: acc.cacheSavingsPerMo + (a.yield?.cacheSavingsPerMo || 0),
+        batchSavingsPerMo: acc.batchSavingsPerMo + (a.yield?.batchSavingsPerMo || 0),
+      }), { cacheSavingsPerMo: 0, batchSavingsPerMo: 0 });
 
       const edgeCount = new Map();
       for (const l of links) {
@@ -267,6 +288,7 @@ export function createStore() {
         agents,
         edges,
         pathologies: pathologies.filter((p) => p.workflow === wf).length,
+        yield: yieldTotal,
       });
     }
     workflows.sort((x, y) => y.spend - x.spend);
@@ -289,5 +311,5 @@ export function createStore() {
     };
   }
 
-  return { ingest, snapshot, listTraces, getTrace, agentSteps };
+  return { ingest, snapshot, listTraces, getTrace, agentSteps, agentChatSteps };
 }

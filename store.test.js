@@ -237,3 +237,32 @@ test('agentSteps returns an agent\'s chat steps with captured requests', () => {
   assert.equal(steps[0].agent, 'writer');
   assert.deepEqual(steps[0].request, req);
 });
+
+test('snapshot computes per-agent and per-workflow yield from context breakdown', () => {
+  const store = createStore();
+  const now = Date.now();
+  const spans = [];
+  for (let i = 0; i < 3; i++) {
+    spans.push(chatSpan({
+      ts: now - (2 - i) * 1000, // recent, increasing
+      trace: 'yTRACE',
+      spanId: 'y' + i,
+      parent: i ? 'y' + (i - 1) : undefined,
+      agent: 'writer',
+      model: 'claude-opus-4-8',
+      inTok: 2000,
+      outTok: 100,
+      extra: [
+        { key: 'fleetglass.context.system_tokens', value: { intValue: 1500 } },
+        { key: 'fleetglass.context.tools_tokens', value: { intValue: 500 } },
+      ],
+    }));
+  }
+  store.ingest(batch(spans, 'wf'));
+  const snap = store.snapshot();
+  const agent = snap.workflows[0].agents.find((a) => a.name === 'writer');
+  assert.ok(agent.yield, 'agent has yield');
+  assert.equal(agent.yield.cacheableTokens, 2000);          // system 1500 + tools 500
+  assert.ok(agent.yield.cacheSavingsPerMo > 0);
+  assert.ok(snap.workflows[0].yield.cacheSavingsPerMo > 0); // workflow sums its agents
+});
