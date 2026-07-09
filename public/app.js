@@ -12,6 +12,22 @@ let snap = null;
 let selectedWf = null;    // workflow name
 let selectedAgent = null; // agent within the selected workflow
 
+// Recoverable headline = always-on yield + on-demand engine results (annualized $).
+// downgrade/context reset on workflow switch; yield refreshes every snapshot.
+const recoverable = { yield: 0, downgrade: 0, context: 0 };
+function renderRecoverable() {
+  $('recoverable').textContent = '≈ ' + money(recoverable.yield + recoverable.downgrade + recoverable.context) + '/yr';
+}
+function showTab(name) {
+  const obs = name === 'observe';
+  $('tab-observe').hidden = !obs;
+  $('tab-savings').hidden = obs;
+  $('tab-btn-observe').classList.toggle('sel', obs);
+  $('tab-btn-savings').classList.toggle('sel', !obs);
+  $('tab-btn-observe').setAttribute('aria-selected', obs);
+  $('tab-btn-savings').setAttribute('aria-selected', !obs);
+}
+
 const money = (n) => {
   if (n >= 100) return '$' + Math.round(n).toLocaleString();
   if (n >= 1) return '$' + n.toFixed(2);
@@ -187,7 +203,11 @@ function renderWorkflows() {
     card.innerHTML = `<div class="name"><i class="${w.live ? '' : 'off'}"></i>${w.name}${w.alerts ? `<span class="warn">▲ ${w.alerts}</span>` : ''}</div>
       <div class="stats"><b>${money(w.spend)}</b> · ${w.callsPerMin}/min · ${w.agents.length} agents</div>`;
     card.addEventListener('click', () => {
-      if (selectedWf !== w.name) { selectedWf = w.name; selectedAgent = null; }
+      if (selectedWf !== w.name) {
+        selectedWf = w.name; selectedAgent = null;
+        recoverable.downgrade = 0; recoverable.context = 0; // on-demand results are per-workflow
+        $('savings-out').textContent = ''; $('context-out').textContent = ''; $('regression-out').textContent = '';
+      }
       renderAll();
     });
     box.appendChild(card);
@@ -452,7 +472,8 @@ $('savings-run').addEventListener('click', async () => {
   if (!(job.findings || []).length) { out.innerHTML = `<div class="savings-note">No captured requests for <b>${job.agent || 'this agent'}</b> — enable <code>captureRequests</code> in the tracer (and set provider keys) so its calls can be sampled and forked.</div>`; return; }
   const pass = (job.findings || []).filter((f) => f.pass && f.savingsPerMo > 0);
   const yr = pass.reduce((s, f) => s + f.savingsPerMo, 0) * 12;
-  out.innerHTML = `<div class="savings-head">Recoverable ≈ ${money(yr)}/yr · agent ${job.agent}</div>` +
+  recoverable.downgrade = yr; renderRecoverable();
+  out.innerHTML = `<div class="savings-head">Downgrade ≈ ${money(yr)}/yr · agent ${job.agent}</div>` +
     (job.findings || []).map((f) => {
       const pct = Math.round(f.agreement * 100);
       return `<div class="savings-row"><span>${(f.from || '?').replace(/^(claude|gemini)-/, '')} → ${(f.to || '?').replace(/^(claude|gemini)-/, '')}${f.fidelity === 'cross-provider' ? ' ~' : ''}</span>` +
@@ -480,6 +501,7 @@ $('context-run').addEventListener('click', async () => {
   if (!(job.findings || []).length) { out.innerHTML = `<div class="savings-note">No captured requests for <b>${job.agent || 'this agent'}</b> — enable <code>captureRequests</code> in the tracer (and set provider keys) so its context can be ablated.</div>`; return; }
   const pass = (job.findings || []).filter((f) => f.pass && f.savingsPerMo > 0);
   const yr = pass.reduce((s, f) => s + f.savingsPerMo, 0) * 12;
+  recoverable.context = yr; renderRecoverable();
   out.innerHTML = `<div class="context-head">Trimmable ≈ ${money(yr)}/yr · agent ${job.agent}</div>` +
     (job.findings || []).map((f) => {
       const pct = Math.round(f.agreement * 100);
@@ -520,6 +542,9 @@ $('regression-run').addEventListener('click', async () => {
     `<div class="savings-note">Advisory — a low % means the new prompt changed that output; review before shipping. Nothing shipped.</div>`;
 });
 
+$('tab-btn-observe').addEventListener('click', () => showTab('observe'));
+$('tab-btn-savings').addEventListener('click', () => showTab('savings'));
+
 $('replay-close').addEventListener('click', closeReplay);
 $('replay').addEventListener('click', (e) => { if (e.target === $('replay')) closeReplay(); });
 $('replay-scrub').addEventListener('input', (e) => { if (replay) { replay.idx = Number(e.target.value); renderReplay(); } });
@@ -543,6 +568,8 @@ function renderAll() {
   renderPathologies(wf);
   renderCtx(wf);
   renderTasks(wf);
+  recoverable.yield = ((wf.yield?.cacheSavingsPerMo || 0) + (wf.yield?.batchSavingsPerMo || 0)) * 12;
+  renderRecoverable();
 }
 
 new EventSource('/api/stream').onmessage = (ev) => {

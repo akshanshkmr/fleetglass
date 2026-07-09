@@ -83,6 +83,20 @@ main { max-width: 1180px; margin: 0 auto; padding: 20px 22px 48px; }
 
 .cols { display: grid; grid-template-columns: minmax(0, 1.9fr) minmax(0, 1fr); gap: 12px; }
 @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } }
+[hidden] { display: none !important; }
+
+.tabs { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid var(--line); }
+.tab {
+  background: none; border: 0; border-bottom: 2px solid transparent;
+  color: var(--dim); font: 500 13px "IBM Plex Sans", sans-serif;
+  padding: 8px 15px; cursor: pointer; margin-bottom: -1px;
+}
+.tab:hover { color: var(--text); }
+.tab.sel { color: var(--text); border-bottom-color: var(--money); }
+
+#recoverable-panel { border-color: var(--line2); }
+.recoverable { font: 500 34px "IBM Plex Mono", monospace; color: var(--ok); margin: 6px 0 6px; font-variant-numeric: tabular-nums; }
+.recoverable-note { font: 11.5px "IBM Plex Mono", monospace; color: var(--dim); }
 .panel {
   background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
   padding: 14px 16px 16px; margin-bottom: 12px;
@@ -285,54 +299,69 @@ main { max-width: 1180px; margin: 0 auto; padding: 20px 22px 48px; }
     <h2>Workflows — click to drill in</h2>
     <div id="workflows" class="empty">Waiting for traffic…</div>
   </section>
-  <div class="cols">
-    <div>
-      <section class="panel">
-        <h2 id="graph-title">Agent topology — last 60s</h2>
-        <svg id="graph" role="img" aria-label="Live agent topology graph"></svg>
-      </section>
-      <section class="panel">
-        <h2>Cost by agent — session</h2>
-        <div id="costs" class="empty">Waiting for traffic…</div>
-      </section>
-      <section class="panel">
-        <h2>Recent tasks — click to replay</h2>
-        <div id="tasks" class="empty">Waiting for traffic…</div>
-      </section>
+  <div class="tabs" role="tablist" aria-label="Views">
+    <button id="tab-btn-observe" class="tab sel" role="tab" aria-selected="true">Observe</button>
+    <button id="tab-btn-savings" class="tab" role="tab" aria-selected="false">Savings</button>
+  </div>
+
+  <div id="tab-observe" role="tabpanel">
+    <div class="cols">
+      <div>
+        <section class="panel">
+          <h2 id="graph-title">Agent topology — last 60s</h2>
+          <svg id="graph" role="img" aria-label="Live agent topology graph"></svg>
+        </section>
+        <section class="panel">
+          <h2>Cost by agent — session</h2>
+          <div id="costs" class="empty">Waiting for traffic…</div>
+        </section>
+        <section class="panel">
+          <h2>Recent tasks — click to replay</h2>
+          <div id="tasks" class="empty">Waiting for traffic…</div>
+        </section>
+      </div>
+      <div>
+        <div class="panel" id="pathology-panel" hidden>
+          <h2>Structural pathology</h2>
+          <div id="pathologies"></div>
+        </div>
+        <section class="panel">
+          <h2>Anomalies</h2>
+          <div id="alerts" class="empty">No anomalies. Baselines steady.</div>
+        </section>
+        <section class="panel">
+          <h2 id="ctx-title">Context window</h2>
+          <div id="ctx" class="empty">Select an agent in the graph.</div>
+        </section>
+      </div>
     </div>
-    <div>
-      <div class="panel" id="pathology-panel" hidden>
-        <h2>Structural pathology</h2>
-        <div id="pathologies"></div>
-      </div>
-      <section class="panel">
-        <h2>Anomalies</h2>
-        <div id="alerts" class="empty">No anomalies. Baselines steady.</div>
-      </section>
-      <div class="panel" id="yield-panel">
-        <h2>Yield</h2>
-        <div id="yield-out" class="empty">No yield signal yet.</div>
-      </div>
-      <section class="panel">
-        <h2 id="ctx-title">Context window</h2>
-        <div id="ctx" class="empty">Select an agent in the graph.</div>
-      </section>
-      <div class="panel" id="savings-panel">
-        <h2>Savings report</h2>
-        <button id="savings-run" class="btn">Analyze savings</button>
-        <div id="savings-out"></div>
-      </div>
-      <div class="panel" id="context-panel">
-        <h2>Context ROI</h2>
-        <button id="context-run" class="btn">Analyze context</button>
-        <div id="context-out"></div>
-      </div>
-      <div class="panel" id="regression-panel">
-        <h2>Prompt regression</h2>
-        <textarea id="regression-input" placeholder="Paste a proposed new system prompt…" rows="3"></textarea>
-        <button id="regression-run" class="btn">Run regression</button>
-        <div id="regression-out"></div>
-      </div>
+  </div>
+
+  <div id="tab-savings" role="tabpanel" hidden>
+    <section class="panel" id="recoverable-panel">
+      <h2>Recoverable — annualized</h2>
+      <div id="recoverable" class="recoverable">≈ $0/yr</div>
+      <div class="recoverable-note">Always-on yield + the on-demand engines below. Advisory — nothing is applied to your system.</div>
+    </section>
+    <div class="panel" id="yield-panel">
+      <h2>Yield — prompt caching &amp; batch (always on)</h2>
+      <div id="yield-out" class="empty">No yield signal yet.</div>
+    </div>
+    <div class="panel" id="savings-panel">
+      <h2>Model downgrade — fork sampled calls on cheaper models</h2>
+      <button id="savings-run" class="btn">Analyze savings</button>
+      <div id="savings-out"></div>
+    </div>
+    <div class="panel" id="context-panel">
+      <h2>Context ROI — ablate tools / system / history</h2>
+      <button id="context-run" class="btn">Analyze context</button>
+      <div id="context-out"></div>
+    </div>
+    <div class="panel" id="regression-panel">
+      <h2>Prompt regression — safety check, no savings</h2>
+      <textarea id="regression-input" placeholder="Paste a proposed new system prompt…" rows="3"></textarea>
+      <button id="regression-run" class="btn">Run regression</button>
+      <div id="regression-out"></div>
     </div>
   </div>
 </main>
