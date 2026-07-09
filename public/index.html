@@ -249,6 +249,12 @@ main { max-width: 1180px; margin: 0 auto; padding: 20px 22px 48px; }
 .savings-row .save { color: var(--money); text-align: right; }
 .savings-note { font: 11px "IBM Plex Mono", monospace; color: var(--dim); margin-top: 8px; }
 
+.yield-head { font: 13px "IBM Plex Mono", monospace; color: var(--ok); margin: 4px 0 10px; }
+.yield-head .if { color: var(--faint); }
+.yield-row { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; font: 11.5px "IBM Plex Mono", monospace; color: var(--dim); padding: 6px 0; border-top: 1px solid var(--line); }
+.yield-row .tok { color: var(--faint); }
+.yield-row .save { color: var(--money); text-align: right; }
+
 #context-panel .btn { background: var(--violet); color: #120a24; border: 0; border-radius: 6px; padding: 7px 13px; font: 500 12.5px "IBM Plex Sans", sans-serif; cursor: pointer; }
 .context-head { font: 13px "IBM Plex Mono", monospace; color: var(--violet); margin: 10px 0; }
 
@@ -303,6 +309,10 @@ main { max-width: 1180px; margin: 0 auto; padding: 20px 22px 48px; }
         <h2>Anomalies</h2>
         <div id="alerts" class="empty">No anomalies. Baselines steady.</div>
       </section>
+      <div class="panel" id="yield-panel">
+        <h2>Yield</h2>
+        <div id="yield-out" class="empty">No yield signal yet.</div>
+      </div>
       <section class="panel">
         <h2 id="ctx-title">Context window</h2>
         <div id="ctx" class="empty">Select an agent in the graph.</div>

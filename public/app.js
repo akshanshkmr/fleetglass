@@ -208,6 +208,21 @@ function renderCosts(wf) {
   }
 }
 
+function renderYield(wf) {
+  const box = $('yield-out');
+  const y = wf.yield || { cacheSavingsPerMo: 0, batchSavingsPerMo: 0 };
+  const agents = wf.agents.filter((a) => a.yield);
+  if (!agents.length || (!y.cacheSavingsPerMo && !y.batchSavingsPerMo)) {
+    box.className = 'empty';
+    box.textContent = 'No yield signal yet (needs context-breakdown traces).';
+    return;
+  }
+  box.className = '';
+  box.innerHTML = `<div class="yield-head">Prompt caching ${money(y.cacheSavingsPerMo)}/mo · Batch API ${money(y.batchSavingsPerMo)}/mo <span class="if">if latency-tolerant</span></div>` +
+    agents.map((a) => `<div class="yield-row"><span>${a.name}</span><span class="tok">~${fmtTok(a.yield.cacheableTokens)} tok/call cacheable</span><span class="save">${money(a.yield.cacheSavingsPerMo)}/mo</span></div>`).join('') +
+    `<div class="savings-note">Estimates — caching assumes a stable reused prefix; batch assumes latency-tolerant calls. Advisory, nothing applied.</div>`;
+}
+
 function renderAlerts() {
   const box = $('alerts');
   if (!snap.alerts.length) {
@@ -523,6 +538,7 @@ function renderAll() {
   renderWorkflows();
   renderGraph(wf);
   renderCosts(wf);
+  renderYield(wf);
   renderAlerts();
   renderPathologies(wf);
   renderCtx(wf);
