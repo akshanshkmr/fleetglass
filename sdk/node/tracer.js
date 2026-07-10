@@ -22,7 +22,7 @@ export function createTracer({ endpoint = process.env.FLEETGLASS_URL || 'http://
 
   const defaultPost = async (spans) => {
     try {
-      await fetch(endpoint, {
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -32,7 +32,8 @@ export function createTracer({ endpoint = process.env.FLEETGLASS_URL || 'http://
           }],
         }),
       });
-    } catch { /* observability must never break the agent */ }
+      return await res.json().catch(() => null); // let the caller read { killed } (kill-switch)
+    } catch { return null; /* observability must never break the agent */ }
   };
   const send = post || defaultPost;
 
@@ -40,7 +41,7 @@ export function createTracer({ endpoint = process.env.FLEETGLASS_URL || 'http://
     if (timer) { clearTimeout(timer); timer = null; }
     const spans = queue;
     queue = [];
-    if (spans.length) await send(spans);
+    if (spans.length) return await send(spans);
   }
   function push(span) {
     queue.push(span);

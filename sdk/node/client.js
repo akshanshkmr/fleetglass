@@ -26,8 +26,9 @@ export function fleetglass(opts = {}) {
   // Telemetry must never break the call. The default transport already swallows
   // fetch errors; a custom `post` might not — and auto-wrap awaits flush() in
   // task's finally, so an unswallowed transport error would reject the call. Wrap it.
-  const safePost = post ? async (spans) => { try { await post(spans); } catch { /* drop */ } } : undefined;
+  const safePost = post ? async (spans) => { try { return await post(spans); } catch { return undefined; /* drop */ } } : undefined;
   const tracer = createTracer({ workflow, endpoint, captureRequests, ...(safePost ? { post: safePost } : {}) });
+  const killedSet = new Set(); // trace ids the control plane has flagged killed
 
   async function runCall(req, maxTokens) {
     const { url, headers, body } = toProvider(req, { provider, model, maxTokens, key });
@@ -44,11 +45,22 @@ export function fleetglass(opts = {}) {
     return { text: completion, usage: { inputTokens: inTok, outputTokens: outTok }, model, raw: data };
   }
 
+  // ponytail: per-call flush (not batched) — a pathology can't fire without many
+  // calls, so this trades a POST-per-call for a fresh kill signal every call.
+  async function guardedCall(req, maxTokens) {
+    const f = currentFrame();
+    if (f && killedSet.has(f.trace)) { const e = new Error('task killed by FleetGlass kill-switch'); e.code = 'KILLED'; throw e; }
+    const r = await runCall(req, maxTokens);
+    const posted = await tracer.flush();                    // span goes out now; response carries { killed }
+    if (posted && Array.isArray(posted.killed)) { killedSet.clear(); for (const t of posted.killed) killedSet.add(t); }
+    return r;
+  }
+
   async function chat(input, perCall = {}) {
     const req = normalize(input);
     const maxTokens = clamp(perCall.maxTokens ?? defMax);
-    if (currentFrame()) return runCall(req, maxTokens);                  // inside user's task/agent
-    return tracer.task(() => tracer.agent(agent, () => runCall(req, maxTokens)));  // auto-wrap
+    if (currentFrame()) return guardedCall(req, maxTokens);                          // inside user's task/agent
+    return tracer.task(() => tracer.agent(agent, () => guardedCall(req, maxTokens))); // auto-wrap
   }
 
   return { chat, task: tracer.task, agent: tracer.agent, flush: tracer.flush, provider, model };

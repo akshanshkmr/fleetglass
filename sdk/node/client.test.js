@@ -111,3 +111,38 @@ test('emit failure never breaks a successful call', async () => {
   const r = await fg.chat('hi');   // must resolve despite the transport throwing
   assert.equal(r.text, 'ok');
 });
+
+// A stub provider `call` that counts invocations and returns an anthropic-shaped reply.
+function countingCall(counter) {
+  return async () => { counter.n++; return { content: [{ type: 'text', text: 'ok' }], usage: { input_tokens: 1, output_tokens: 1 } }; };
+}
+
+test('killed task: the next chat throws KILLED and does not call the provider', async () => {
+  const counter = { n: 0 };
+  // post echoes the just-emitted trace back as killed → the next call in the same task is armed.
+  const post = async (spans) => ({ killed: [spans[0].traceId] });
+  const fg = fleetglass({ model: 'claude-sonnet-5', key: 'k', call: countingCall(counter), post });
+  await assert.rejects(
+    fg.task(async () => {
+      await fg.chat('one');   // runs; post marks this trace killed
+      await fg.chat('two');   // trace killed → throws before the provider call
+    }),
+    (e) => e.code === 'KILLED',
+  );
+  assert.equal(counter.n, 1); // provider called exactly once
+});
+
+test('not killed: every chat in the task runs', async () => {
+  const counter = { n: 0 };
+  const fg = fleetglass({ model: 'claude-sonnet-5', key: 'k', call: countingCall(counter), post: async () => ({ killed: [] }) });
+  await fg.task(async () => { await fg.chat('one'); await fg.chat('two'); });
+  assert.equal(counter.n, 2);
+});
+
+test('a throwing telemetry post never breaks the call', async () => {
+  const counter = { n: 0 };
+  const fg = fleetglass({ model: 'claude-sonnet-5', key: 'k', call: countingCall(counter), post: async () => { throw new Error('boom'); } });
+  const r = await fg.chat('hi'); // auto-wrap; post throws but is swallowed
+  assert.equal(r.text, 'ok');
+  assert.equal(counter.n, 1);
+});
