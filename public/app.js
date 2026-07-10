@@ -278,8 +278,13 @@ function renderPathologies(wf) {
     const kill = document.createElement('button');
     kill.className = 'kill';
     kill.textContent = 'Kill';
-    kill.disabled = true;
-    kill.title = 'needs in-path client (Phase C)';
+    kill.addEventListener('click', async () => {
+      kill.disabled = true;
+      try {
+        const res = await fetch('/api/kill', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ trace: p.trace }) });
+        if (res.ok) { kill.textContent = 'killed'; } else { kill.disabled = false; }
+      } catch { kill.disabled = false; }
+    });
     div.append(replay, kill);
     box.appendChild(div);
   }
