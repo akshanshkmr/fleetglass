@@ -271,7 +271,7 @@ function renderPathologies(wf) {
   for (const p of mine) {
     const div = document.createElement('div');
     div.className = 'patho';
-    div.innerHTML = `<span class="k">${label[p.kind] || p.kind}</span><span class="d">${p.detail}</span><span class="c">${money(p.cost)} burned</span>`;
+    div.innerHTML = `<span class="k">${label[p.kind] || esc(p.kind)}</span><span class="d">${esc(p.detail)}</span><span class="c">${money(p.cost)} burned</span>`;
     const replay = document.createElement('button');
     replay.textContent = 'Replay';
     replay.addEventListener('click', () => openReplay(p.trace, p.step));
