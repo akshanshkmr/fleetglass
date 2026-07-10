@@ -266,3 +266,17 @@ test('snapshot computes per-agent and per-workflow yield from context breakdown'
   assert.ok(agent.yield.cacheSavingsPerMo > 0);
   assert.ok(snap.workflows[0].yield.cacheSavingsPerMo > 0); // workflow sums its agents
 });
+
+test('kill arms a trace; killed lists it and prunes after the TTL', () => {
+  const s = createStore();
+  const now = 1_000_000;
+  s.kill('t1', now);
+  assert.deepEqual(s.killed(now), ['t1']);
+  assert.deepEqual(s.killed(now + 11 * 60 * 1000), []); // pruned after 10min TTL
+});
+
+test('kill ignores a falsy trace', () => {
+  const s = createStore();
+  s.kill('', 1000);
+  assert.deepEqual(s.killed(1000), []);
+});

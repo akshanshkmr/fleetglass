@@ -56,6 +56,7 @@ const RECENT_MS = 90 * 1000; // anomaly: recent window vs prior baseline
 const ANOMALY_RATIO = 1.7;
 const MIN_SAMPLES = 5;
 const MAX_TRACES = 300;
+const KILL_TTL_MS = 10 * 60 * 1000; // a killed trace throws & dies fast; entry only outlives in-flight calls
 
 export function createStore() {
   const spanAgent = new Map(); // spanId -> agent name, for cross-batch parent lookup
@@ -64,6 +65,7 @@ export function createStore() {
   const traces = new Map(); // traceId -> {start, wf, steps} — the replay record
   const cumulative = new Map(); // wf -> {spend, calls, agents: Map(name -> {spend, model})}
   const alertSince = new Map(); // "wf/agent" -> ts
+  const killedTraces = new Map(); // traceId -> armedAt (ms) — the kill-switch set
 
   function bucket(wf) {
     let b = cumulative.get(wf);
@@ -311,5 +313,13 @@ export function createStore() {
     };
   }
 
-  return { ingest, snapshot, listTraces, getTrace, agentSteps, agentChatSteps };
+  function kill(trace, now = Date.now()) {
+    if (trace) killedTraces.set(String(trace), now);
+  }
+  function killed(now = Date.now()) {
+    for (const [t, at] of killedTraces) if (now - at > KILL_TTL_MS) killedTraces.delete(t);
+    return [...killedTraces.keys()];
+  }
+
+  return { ingest, snapshot, listTraces, getTrace, agentSteps, agentChatSteps, kill, killed };
 }
