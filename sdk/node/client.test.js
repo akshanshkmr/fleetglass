@@ -176,3 +176,11 @@ test('no route: model unchanged and result reports the model actually used', asy
   assert.equal(models[0], 'claude-sonnet-5');
   assert.equal(r.model, 'claude-sonnet-5');
 });
+
+test('non-string route target is ignored — call stays on the original model, no throw', async () => {
+  const models = [];
+  const post = async () => ({ routes: { 'default/agent': 42 } }); // malformed: non-string target
+  const fg = fleetglass({ model: 'claude-sonnet-5', key: 'k', call: modelCapturingCall(models), post });
+  await fg.task(async () => { await fg.chat('a'); await fg.chat('b'); });
+  assert.equal(models[1], 'claude-sonnet-5'); // malformed route ignored, no crash
+});

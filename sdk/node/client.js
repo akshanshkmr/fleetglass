@@ -52,7 +52,7 @@ export function fleetglass(opts = {}) {
     const f = currentFrame();
     if (f && killedSet.has(f.trace)) { const e = new Error('task killed by FleetGlass kill-switch'); e.code = 'KILLED'; throw e; }
     const target = routeMap[workflow + '/' + ((f && f.agent) || agent)];
-    const useModel = (target && providerOf(target) === provider) ? target : model; // same-provider only; else ignore
+    const useModel = (typeof target === 'string' && providerOf(target) === provider) ? target : model; // same-provider only; else ignore
     const r = await runCall(req, maxTokens, useModel);
     const posted = await tracer.flush();                    // span goes out now; response carries { killed, routes }
     if (posted && Array.isArray(posted.killed)) { killedSet.clear(); for (const t of posted.killed) killedSet.add(t); }
