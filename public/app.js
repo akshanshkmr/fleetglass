@@ -459,6 +459,8 @@ function forkPanel(traceId, idx, step) {
 
 const esc = (s) => (s || '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 
+let lastSavings = null; // { wf, findings } — so the delegated Route listener can look findings up by index
+
 // savings report: sample recent calls, fork on cheaper models, judge agreement.
 $('savings-run').addEventListener('click', async () => {
   const wf = selectedWf;
@@ -478,14 +480,38 @@ $('savings-run').addEventListener('click', async () => {
   const pass = (job.findings || []).filter((f) => f.pass && f.savingsPerMo > 0);
   const yr = pass.reduce((s, f) => s + f.savingsPerMo, 0) * 12;
   recoverable.downgrade = yr; renderRecoverable();
+  lastSavings = { wf, findings: job.findings || [] };
   out.innerHTML = `<div class="savings-head">Downgrade ≈ ${money(yr)}/yr · agent ${job.agent}</div>` +
-    (job.findings || []).map((f) => {
+    lastSavings.findings.map((f, i) => {
       const pct = Math.round(f.agreement * 100);
+      const routable = f.pass && f.fidelity === 'exact';
+      const btn = routable
+        ? `<button class="route-btn" data-i="${i}">Route</button>`
+        : `<button class="route-btn" disabled title="${f.pass ? 'cross-provider — needs target key' : 'below agreement bar'}">Route</button>`;
       return `<div class="savings-row"><span>${(f.from || '?').replace(/^(claude|gemini)-/, '')} → ${(f.to || '?').replace(/^(claude|gemini)-/, '')}${f.fidelity === 'cross-provider' ? ' ~' : ''}</span>` +
         `<span class="agree ${f.pass ? '' : 'warn'}">${pct}%</span>` +
-        `<span class="save">${money(f.savingsPerMo)}/mo</span></div>`;
+        `<span class="save">${money(f.savingsPerMo)}/mo</span>${btn}</div>`;
     }).join('') +
-    `<div class="savings-note">~ = cross-provider (tools dropped). Agreement measured on ${(job.findings?.[0]?.samples) || 0} sampled calls. Advisory — nothing changed in your system.</div>`;
+    `<div class="savings-note">~ = cross-provider (tools dropped). Agreement on ${(job.findings?.[0]?.samples) || 0} sampled calls. Route flips a same-provider pass live; click again to revert.</div>`;
+});
+
+// Route button (delegated — savings-out is re-rendered each run; buttons carry only a numeric index).
+$('savings-out').addEventListener('click', async (e) => {
+  const btn = e.target.closest('.route-btn');
+  if (!btn || btn.disabled || !lastSavings) return;
+  const f = lastSavings.findings[+btn.dataset.i];
+  if (!f) return;
+  const routed = btn.dataset.routed === '1';
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/route', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ workflow: lastSavings.wf, agent: f.agent, model: routed ? '' : f.to }) });
+    if (res.ok) {
+      btn.dataset.routed = routed ? '' : '1';
+      btn.textContent = routed ? 'Route' : 'Routed → ' + (f.to || '').replace(/^(claude|gemini)-/, '');
+    }
+  } catch { /* leave button as-is */ }
+  btn.disabled = false;
 });
 
 // context ROI report: re-run calls with each context segment (tools/system/history) removed.
