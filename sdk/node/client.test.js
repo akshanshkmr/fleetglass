@@ -146,3 +146,33 @@ test('a throwing telemetry post never breaks the call', async () => {
   assert.equal(r.text, 'ok');
   assert.equal(counter.n, 1);
 });
+
+// Records the provider request's `model` (anthropic/openai put it in the body) per call.
+function modelCapturingCall(models) {
+  return async (url, headers, body) => { models.push(body.model); return { content: [{ type: 'text', text: 'ok' }], usage: { input_tokens: 1, output_tokens: 1 } }; };
+}
+
+test('routed agent: after harvest, the next same-provider call swaps to the cheaper model', async () => {
+  const models = [];
+  const post = async () => ({ routes: { 'default/agent': 'claude-haiku-4-5' } });
+  const fg = fleetglass({ model: 'claude-sonnet-5', key: 'k', call: modelCapturingCall(models), post });
+  await fg.task(async () => { await fg.chat('a'); await fg.chat('b'); });
+  assert.equal(models[0], 'claude-sonnet-5'); // first call: routeMap not harvested yet
+  assert.equal(models[1], 'claude-haiku-4-5'); // second call: routed (same provider)
+});
+
+test('cross-provider route is ignored — the call stays on the original model', async () => {
+  const models = [];
+  const post = async () => ({ routes: { 'default/agent': 'gemini-2.0-flash' } }); // different provider
+  const fg = fleetglass({ model: 'claude-sonnet-5', key: 'k', call: modelCapturingCall(models), post });
+  await fg.task(async () => { await fg.chat('a'); await fg.chat('b'); });
+  assert.equal(models[1], 'claude-sonnet-5'); // cross-provider route not applied
+});
+
+test('no route: model unchanged and result reports the model actually used', async () => {
+  const models = [];
+  const fg = fleetglass({ model: 'claude-sonnet-5', key: 'k', call: modelCapturingCall(models), post: async () => ({}) });
+  const r = await fg.chat('a');
+  assert.equal(models[0], 'claude-sonnet-5');
+  assert.equal(r.model, 'claude-sonnet-5');
+});

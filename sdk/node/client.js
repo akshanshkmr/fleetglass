@@ -29,30 +29,34 @@ export function fleetglass(opts = {}) {
   const safePost = post ? async (spans) => { try { return await post(spans); } catch { return undefined; /* drop */ } } : undefined;
   const tracer = createTracer({ workflow, endpoint, captureRequests, ...(safePost ? { post: safePost } : {}) });
   const killedSet = new Set(); // trace ids the control plane has flagged killed
+  let routeMap = {}; // "workflow/agent" -> target model, harvested from /v1/traces responses
 
-  async function runCall(req, maxTokens) {
-    const { url, headers, body } = toProvider(req, { provider, model, maxTokens, key });
+  async function runCall(req, maxTokens, useModel = model) {
+    const { url, headers, body } = toProvider(req, { provider, model: useModel, maxTokens, key });
     const data = await call(url, headers, body);          // throws on API/network error
     const { completion, inTok, outTok } = parseResponse(provider, data);
     try {
       tracer.emitChat({
-        model, inputTokens: inTok, outputTokens: outTok,
+        model: useModel, inputTokens: inTok, outputTokens: outTok,
         prompt: lastUser(req.messages), completion,
         context: { system: req.system || '', history: historyText(req.messages), tools: req.tools ? JSON.stringify(req.tools) : '' },
         request: req,
       });
     } catch { /* telemetry must never break a successful call */ }
-    return { text: completion, usage: { inputTokens: inTok, outputTokens: outTok }, model, raw: data };
+    return { text: completion, usage: { inputTokens: inTok, outputTokens: outTok }, model: useModel, raw: data };
   }
 
   // ponytail: per-call flush (not batched) — a pathology can't fire without many
-  // calls, so this trades a POST-per-call for a fresh kill signal every call.
+  // calls, so this trades a POST-per-call for a fresh kill/route signal every call.
   async function guardedCall(req, maxTokens) {
     const f = currentFrame();
     if (f && killedSet.has(f.trace)) { const e = new Error('task killed by FleetGlass kill-switch'); e.code = 'KILLED'; throw e; }
-    const r = await runCall(req, maxTokens);
-    const posted = await tracer.flush();                    // span goes out now; response carries { killed }
+    const target = routeMap[workflow + '/' + ((f && f.agent) || agent)];
+    const useModel = (target && providerOf(target) === provider) ? target : model; // same-provider only; else ignore
+    const r = await runCall(req, maxTokens, useModel);
+    const posted = await tracer.flush();                    // span goes out now; response carries { killed, routes }
     if (posted && Array.isArray(posted.killed)) { killedSet.clear(); for (const t of posted.killed) killedSet.add(t); }
+    if (posted && posted.routes && typeof posted.routes === 'object') routeMap = posted.routes;
     return r;
   }
 
