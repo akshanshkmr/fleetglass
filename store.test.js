@@ -280,3 +280,13 @@ test('kill ignores a falsy trace', () => {
   s.kill('', 1000);
   assert.deepEqual(s.killed(1000), []);
 });
+
+test('route sets a target; routes() returns it; empty model clears; re-route overwrites', () => {
+  const s = createStore();
+  s.route('wf', 'planner', 'claude-haiku-4-5');
+  assert.deepEqual(s.routes(), { 'wf/planner': 'claude-haiku-4-5' });
+  s.route('wf', 'planner', 'gemini-2.0-flash'); // overwrite
+  assert.deepEqual(s.routes(), { 'wf/planner': 'gemini-2.0-flash' });
+  s.route('wf', 'planner', ''); // clear
+  assert.deepEqual(s.routes(), {});
+});

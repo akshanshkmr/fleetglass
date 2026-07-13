@@ -66,6 +66,7 @@ export function createStore() {
   const cumulative = new Map(); // wf -> {spend, calls, agents: Map(name -> {spend, model})}
   const alertSince = new Map(); // "wf/agent" -> ts
   const killedTraces = new Map(); // traceId -> armedAt (ms) — the kill-switch set
+  const routeTable = new Map(); // "workflow/agent" -> target model — durable, no TTL
 
   function bucket(wf) {
     let b = cumulative.get(wf);
@@ -320,6 +321,13 @@ export function createStore() {
     for (const [t, at] of killedTraces) if (now - at > KILL_TTL_MS) killedTraces.delete(t);
     return [...killedTraces.keys()];
   }
+  function route(workflow, agent, model) {
+    const k = String(workflow) + '/' + String(agent);
+    if (model) routeTable.set(k, String(model)); else routeTable.delete(k);
+  }
+  function routes() {
+    return Object.fromEntries(routeTable);
+  }
 
-  return { ingest, snapshot, listTraces, getTrace, agentSteps, agentChatSteps, kill, killed };
+  return { ingest, snapshot, listTraces, getTrace, agentSteps, agentChatSteps, kill, killed, route, routes };
 }
