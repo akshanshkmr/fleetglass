@@ -37,7 +37,7 @@ const server = http.createServer(async (req, res) => {
     req.on('data', (c) => { body += c; if (body.length > 8e6) req.destroy(); });
     req.on('end', () => {
       try { store.ingest(JSON.parse(body)); } catch { res.writeHead(400).end(); return; }
-      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ killed: store.killed() }));
+      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ killed: store.killed(), routes: store.routes() }));
     });
     return;
   }
@@ -67,6 +67,20 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(400, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'trace required' })); return;
       }
       store.kill(params.trace);
+      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ ok: true }));
+    });
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/route') {
+    let body = '';
+    req.on('data', (c) => { body += c; if (body.length > 1e5) req.destroy(); });
+    req.on('end', () => {
+      let params; try { params = JSON.parse(body); } catch { res.writeHead(400).end('{}'); return; }
+      if (!params || typeof params !== 'object' || typeof params.workflow !== 'string' || !params.workflow || typeof params.agent !== 'string' || !params.agent) {
+        res.writeHead(400, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'workflow and agent required' })); return;
+      }
+      store.route(params.workflow, params.agent, typeof params.model === 'string' ? params.model : '');
       res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ ok: true }));
     });
     return;
