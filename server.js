@@ -221,9 +221,10 @@ const server = http.createServer(async (req, res) => {
   const file = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
   if (file.includes('..')) { res.writeHead(403).end(); return; }
   try {
+    const data = await readFile(join(PUB, file));           // read first: a missing file must not leave headers half-sent
     const ext = file.slice(file.lastIndexOf('.'));
     res.writeHead(200, { 'content-type': MIME[ext] || 'application/octet-stream' });
-    res.end(await readFile(join(PUB, file)));
+    res.end(data);
   } catch {
     res.writeHead(404).end('not found');
   }
