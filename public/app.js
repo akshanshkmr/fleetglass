@@ -490,7 +490,7 @@ $('savings-run').addEventListener('click', async () => {
         : `<button class="route-btn" disabled title="${f.pass ? 'cross-provider — needs target key' : 'below agreement bar'}">Route</button>`;
       return `<div class="savings-row"><span>${(f.from || '?').replace(/^(claude|gemini)-/, '')} → ${(f.to || '?').replace(/^(claude|gemini)-/, '')}${f.fidelity === 'cross-provider' ? ' ~' : ''}</span>` +
         `<span class="agree ${f.pass ? '' : 'warn'}">${pct}%</span>` +
-        `<span class="save">${money(f.savingsPerMo)}/mo</span>${btn}</div>`;
+        `<span class="save">${money(f.savingsPerMo)}/mo</span>${btn}<button class="shadow-btn" data-i="${i}">Shadow</button></div>`;
     }).join('') +
     `<div class="savings-note">~ = cross-provider (tools dropped). Agreement on ${(job.findings?.[0]?.samples) || 0} sampled calls. Route flips a same-provider pass live; click again to revert.</div>`;
 });
@@ -511,6 +511,22 @@ $('savings-out').addEventListener('click', async (e) => {
       btn.textContent = routed ? 'Route' : 'Routed → ' + (f.to || '').replace(/^(claude|gemini)-/, '');
     }
   } catch { /* leave button as-is */ }
+  btn.disabled = false;
+});
+
+// Shadow button (delegated — same numeric-index pattern as Route).
+$('savings-out').addEventListener('click', async (e) => {
+  const btn = e.target.closest('.shadow-btn');
+  if (!btn || !lastSavings) return;
+  const f = lastSavings.findings[+btn.dataset.i];
+  if (!f) return;
+  const on = btn.dataset.on === '1';
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/shadow', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ workflow: lastSavings.wf, agent: f.agent, model: on ? '' : f.to }) });
+    if (res.ok) { btn.dataset.on = on ? '' : '1'; btn.textContent = on ? 'Shadow' : 'Shadowing'; }
+  } catch { /* leave as-is */ }
   btn.disabled = false;
 });
 
@@ -586,6 +602,21 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'ArrowLeft' && replay.idx > 0) { replay.idx--; renderReplay(); }
 });
 
+function renderShadows() {
+  const panel = $('shadow-panel'), box = $('shadow-out');
+  const list = (snap.shadows || []).filter((s) => s.workflow === selectedWf);
+  panel.hidden = !list.length;
+  box.innerHTML = list.map((s) => {
+    const pct = Math.round((s.agreement || 0) * 100);
+    const cls = s.status === 'drifting' ? 'warn' : '';
+    const model = (s.model || '').replace(/^(claude|gemini)-/, '');
+    return `<div class="savings-row"><span>${esc(s.agent)} → ${esc(model)}</span>` +
+      `<span class="agree ${cls}">${s.runs ? pct + '%' : '—'}</span>` +
+      `<span class="save ${cls}">${esc(s.status)} · ${s.samples || 0} samples</span></div>`;
+  }).join('') +
+    `<div class="savings-note">Re-verifies each candidate on fresh traffic every few minutes — this spends on forks + judge calls. Click <b>Shadow</b> on a finding again to stop.</div>`;
+}
+
 function renderAll() {
   if (!snap || !snap.workflows.length) return;
   const wf = currentWf();
@@ -599,6 +630,7 @@ function renderAll() {
   renderPathologies(wf);
   renderCtx(wf);
   renderTasks(wf);
+  renderShadows();
   recoverable.yield = ((wf.yield?.cacheSavingsPerMo || 0) + (wf.yield?.batchSavingsPerMo || 0)) * 12;
   renderRecoverable();
 }
