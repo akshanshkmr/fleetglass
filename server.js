@@ -29,6 +29,32 @@ setInterval(() => {
   for (const res of sseClients) res.write(data);
 }, 1500);
 
+// Shadow-mode: periodically re-verify each armed pairing against the freshest
+// captured traffic. Reuses the exact analyze/judge/fork wiring the /api/savings
+// route builds. Spends real money (forks + judge) — interval is the cost knob,
+// and a pairing with no captured steps or no target key is skipped.
+const SHADOW_INTERVAL_MS = Number(process.env.SHADOW_INTERVAL_MS) || 5 * 60 * 1000;
+let shadowRunning = false;
+async function shadowPass() {
+  if (shadowRunning) return;                          // never overlap slow passes
+  shadowRunning = true;
+  try {
+    const judgeKey = keyFor(providerOf(JUDGE_MODEL));
+    const judge = judgeKey ? makeJudge({ model: JUDGE_MODEL, key: judgeKey }) : null;
+    const score = (a, b) => scoreFn(a, b, judge ? { judge } : {});
+    for (const p of store.shadows()) {
+      try {
+        const steps = store.agentSteps(p.workflow, p.agent);
+        if (!steps.length || !keyFor(providerOf(p.model))) continue;   // nothing to fork, or no key
+        const findings = await analyze({ steps, agent: p.agent, targets: [{ model: p.model }], callsPerMonth: 0, fork: forkStep, score });
+        const f = findings[0];
+        if (f) store.recordShadow(p.workflow, p.agent, { agreement: f.agreement, samples: f.samples });
+      } catch { /* one pairing's failure never breaks the pass */ }
+    }
+  } finally { shadowRunning = false; }
+}
+setInterval(shadowPass, SHADOW_INTERVAL_MS);
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
 
@@ -81,6 +107,20 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(400, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'workflow and agent required' })); return;
       }
       store.route(params.workflow, params.agent, typeof params.model === 'string' ? params.model : '');
+      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ ok: true }));
+    });
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/shadow') {
+    let body = '';
+    req.on('data', (c) => { body += c; if (body.length > 1e5) req.destroy(); });
+    req.on('end', () => {
+      let params; try { params = JSON.parse(body); } catch { res.writeHead(400).end('{}'); return; }
+      if (!params || typeof params !== 'object' || typeof params.workflow !== 'string' || !params.workflow || typeof params.agent !== 'string' || !params.agent) {
+        res.writeHead(400, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'workflow and agent required' })); return;
+      }
+      store.shadow(params.workflow, params.agent, typeof params.model === 'string' ? params.model : '');
       res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ ok: true }));
     });
     return;
