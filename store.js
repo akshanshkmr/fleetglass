@@ -6,6 +6,7 @@
 
 import { detectPathologies } from './pathology.js';
 import { agentYield } from './yield.js';
+import { updateShadow, shadowStatus } from './shadow.js';
 
 export const PRICES = {
   // $ per Mtok [input, output] — list prices as of mid-2026, adjust as needed
@@ -67,6 +68,7 @@ export function createStore() {
   const alertSince = new Map(); // "wf/agent" -> ts
   const killedTraces = new Map(); // traceId -> armedAt (ms) — the kill-switch set
   const routeTable = new Map(); // "workflow/agent" -> target model — durable, no TTL
+  const shadowSet = new Map(); // "workflow/agent" -> { workflow, agent, model, state, since, lastRun } — durable
 
   function bucket(wf) {
     let b = cumulative.get(wf);
@@ -311,6 +313,7 @@ export function createStore() {
       workflows,
       alerts,
       pathologies,
+      shadows: shadows(),
     };
   }
 
@@ -328,6 +331,26 @@ export function createStore() {
   function routes() {
     return Object.fromEntries(routeTable);
   }
+  function shadow(workflow, agent, model) {
+    const k = String(workflow) + '/' + String(agent);
+    if (model) shadowSet.set(k, { workflow: String(workflow), agent: String(agent), model: String(model), state: null, since: 0, lastRun: 0 });
+    else shadowSet.delete(k);
+  }
+  function recordShadow(workflow, agent, sample, now = Date.now()) {
+    const e = shadowSet.get(String(workflow) + '/' + String(agent));
+    if (!e) return; // stopped
+    e.state = updateShadow(e.state, sample);
+    if (!e.since) e.since = now;
+    e.lastRun = now;
+  }
+  function shadows() {
+    const out = [];
+    for (const e of shadowSet.values()) {
+      const st = e.state || { agreement: 0, runs: 0, samples: 0 };
+      out.push({ workflow: e.workflow, agent: e.agent, model: e.model, agreement: st.agreement, runs: st.runs, samples: st.samples, status: shadowStatus(st), since: e.since, lastRun: e.lastRun });
+    }
+    return out;
+  }
 
-  return { ingest, snapshot, listTraces, getTrace, agentSteps, agentChatSteps, kill, killed, route, routes };
+  return { ingest, snapshot, listTraces, getTrace, agentSteps, agentChatSteps, kill, killed, route, routes, shadow, shadows, recordShadow };
 }

@@ -290,3 +290,31 @@ test('route sets a target; routes() returns it; empty model clears; re-route ove
   s.route('wf', 'planner', ''); // clear
   assert.deepEqual(s.routes(), {});
 });
+
+test('shadow: arm, record advances state, status crosses the bar, stop clears', () => {
+  const s = createStore();
+  s.shadow('wf', 'planner', 'claude-haiku-4-5');
+  assert.equal(s.shadows().length, 1);
+  assert.equal(s.shadows()[0].status, 'validating'); // runs 0
+
+  for (let i = 0; i < 3; i++) s.recordShadow('wf', 'planner', { agreement: 0.98, samples: 8 });
+  let row = s.shadows()[0];
+  assert.equal(row.runs, 3);
+  assert.equal(row.status, 'passing');
+  assert.ok(row.samples === 24);
+
+  for (let i = 0; i < 4; i++) s.recordShadow('wf', 'planner', { agreement: 0.5, samples: 8 });
+  assert.equal(s.shadows()[0].status, 'drifting'); // smoothed agreement fell below the bar
+
+  s.shadow('wf', 'planner', ''); // stop
+  assert.deepEqual(s.shadows(), []);
+  s.recordShadow('wf', 'planner', { agreement: 0.9, samples: 8 }); // no-op on a stopped pairing
+  assert.deepEqual(s.shadows(), []);
+});
+
+test('snapshot exposes shadows', () => {
+  const s = createStore();
+  s.shadow('wf', 'planner', 'claude-haiku-4-5');
+  assert.equal(s.snapshot().shadows.length, 1);
+  assert.equal(s.snapshot().shadows[0].agent, 'planner');
+});
