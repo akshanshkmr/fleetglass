@@ -33,7 +33,7 @@ setInterval(() => {
 // captured traffic. Reuses the exact analyze/judge/fork wiring the /api/savings
 // route builds. Spends real money (forks + judge) — interval is the cost knob,
 // and a pairing with no captured steps or no target key is skipped.
-const SHADOW_INTERVAL_MS = Number(process.env.SHADOW_INTERVAL_MS) || 5 * 60 * 1000;
+const SHADOW_INTERVAL_MS = Math.max(30_000, Number(process.env.SHADOW_INTERVAL_MS) || 5 * 60 * 1000); // floor: this loop spends money
 let shadowRunning = false;
 async function shadowPass() {
   if (shadowRunning) return;                          // never overlap slow passes
@@ -41,6 +41,7 @@ async function shadowPass() {
   try {
     const judgeKey = keyFor(providerOf(JUDGE_MODEL));
     const judge = judgeKey ? makeJudge({ model: JUDGE_MODEL, key: judgeKey }) : null;
+    if (!judge) return;   // no judge → every sample would score 0 → a false `drifting` alarm on real spend
     const score = (a, b) => scoreFn(a, b, judge ? { judge } : {});
     for (const p of store.shadows()) {
       try {
@@ -51,7 +52,7 @@ async function shadowPass() {
         if (f) store.recordShadow(p.workflow, p.agent, { agreement: f.agreement, samples: f.samples });
       } catch { /* one pairing's failure never breaks the pass */ }
     }
-  } finally { shadowRunning = false; }
+  } catch { /* a shadow pass must never take down the control plane */ } finally { shadowRunning = false; }
 }
 setInterval(shadowPass, SHADOW_INTERVAL_MS);
 

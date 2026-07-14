@@ -488,9 +488,10 @@ $('savings-run').addEventListener('click', async () => {
       const btn = routable
         ? `<button class="route-btn" data-i="${i}">Route</button>`
         : `<button class="route-btn" disabled title="${f.pass ? 'cross-provider — needs target key' : 'below agreement bar'}">Route</button>`;
+      const shadowed = (snap.shadows || []).some((s) => s.workflow === wf && s.agent === f.agent && s.model === f.to);
       return `<div class="savings-row"><span>${(f.from || '?').replace(/^(claude|gemini)-/, '')} → ${(f.to || '?').replace(/^(claude|gemini)-/, '')}${f.fidelity === 'cross-provider' ? ' ~' : ''}</span>` +
         `<span class="agree ${f.pass ? '' : 'warn'}">${pct}%</span>` +
-        `<span class="save">${money(f.savingsPerMo)}/mo</span>${btn}<button class="shadow-btn" data-i="${i}">Shadow</button></div>`;
+        `<span class="save">${money(f.savingsPerMo)}/mo</span>${btn}<button class="shadow-btn" data-i="${i}"${shadowed ? ' data-on="1"' : ''}>${shadowed ? 'Shadowing' : 'Shadow'}</button></div>`;
     }).join('') +
     `<div class="savings-note">~ = cross-provider (tools dropped). Agreement on ${(job.findings?.[0]?.samples) || 0} sampled calls. Route flips a same-provider pass live; click again to revert.</div>`;
 });
