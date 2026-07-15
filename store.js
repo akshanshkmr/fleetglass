@@ -4,9 +4,9 @@
 // aggregates across all of them.
 // ponytail: in-memory + 10min window; swap for ClickHouse when retention matters.
 
-import { detectPathologies } from './pathology.js';
-import { agentYield } from './yield.js';
-import { updateShadow, shadowStatus } from './shadow.js';
+import { detectPathologies } from './engines/pathology.js';
+import { agentYield } from './engines/yield.js';
+import { updateShadow, shadowStatus } from './engines/shadow.js';
 
 export const PRICES = {
   // $ per Mtok [input, output] — list prices as of mid-2026, adjust as needed

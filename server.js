@@ -4,12 +4,12 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createStore } from './store.js';
 import { forkStep, keyFor } from './fork.js';
-import { analyze, projectCallsPerMonth } from './savings.js';
+import { analyze, projectCallsPerMonth } from './engines/savings.js';
 import { makeJudge } from './judge.js';
-import { score as scoreFn } from './agreement.js';
+import { score as scoreFn } from './engines/agreement.js';
 import { providerOf } from './translate.js';
-import { analyzeContext } from './contextroi.js';
-import { analyzeRegression } from './regression.js';
+import { analyzeContext } from './engines/contextroi.js';
+import { analyzeRegression } from './engines/regression.js';
 
 const PORT = process.env.PORT || 4700;
 const PUB = join(dirname(fileURLToPath(import.meta.url)), 'public');

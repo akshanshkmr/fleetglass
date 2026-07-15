@@ -1,7 +1,7 @@
 // savings.js — the model-downgrade engine. Samples an agent's real calls, forks
 // each onto cheaper targets, scores agreement, and turns the cost delta into a
 // dollar finding. Pure: fork + score are injected (real ones wired in the server).
-import { providerOf } from './translate.js';
+import { providerOf } from '../translate.js';
 
 const mean = (xs) => xs.reduce((s, x) => s + x, 0) / (xs.length || 1);
 
